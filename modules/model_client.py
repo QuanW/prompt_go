@@ -5,6 +5,7 @@ AI模型客户端模块
 """
 
 import asyncio
+import codecs
 import logging
 import json
 import time
@@ -293,6 +294,23 @@ class ModelClient(ABC):
             'average_response_time': 0.0,
             'last_request_time': None
         }
+
+    def _format_sse_event(self, event_lines: List[str]) -> Optional[str]:
+        """将一组SSE事件行转换为现有解析器使用的data行。"""
+        data_lines = []
+
+        for line in event_lines:
+            if not line or line.startswith(":"):
+                continue
+
+            if line.startswith("data:"):
+                data_lines.append(line[5:].lstrip())
+
+        if not data_lines:
+            return None
+
+        data = "\n".join(data_lines)
+        return f"data: {data}"
     
     # 同步方法
     def chat(self, request: ModelRequest) -> ModelResponse:
@@ -565,9 +583,24 @@ class ModelClient(ABC):
                 elif response.status_code >= 400:
                     raise APIConnectionError(f"API请求失败，状态码: {response.status_code}")
                 
-                for line in response.iter_lines(decode_unicode=True):
-                    if line and line.strip():
-                        yield line.strip()
+                event_lines = []
+                for raw_line in response.iter_lines(decode_unicode=False):
+                    if raw_line is None:
+                        continue
+
+                    line = raw_line.decode('utf-8', errors='replace').rstrip('\r')
+                    if line == "":
+                        event = self._format_sse_event(event_lines)
+                        if event:
+                            yield event
+                        event_lines = []
+                        continue
+
+                    event_lines.append(line)
+
+                event = self._format_sse_event(event_lines)
+                if event:
+                    yield event
                         
         except requests.exceptions.Timeout:
             raise APITimeoutError(f"API流式请求超时（{timeout}秒）")
@@ -626,39 +659,33 @@ class ModelClient(ABC):
                 elif response.status >= 400:
                     raise APIConnectionError(f"API请求失败，状态码: {response.status}")
                 
+                decoder = codecs.getincrementaldecoder('utf-8')()
                 buffer = ""
-                async for line in response.content:
-                    line_str = line.decode('utf-8', errors='replace')
-                    if not line_str:
-                        continue
-                    buffer += line_str
-                    while True:
-                        idx = buffer.find("data: ")
-                        if idx == -1:
-                            # 没有完整data:块，等待更多数据
-                            break
-                        # 查找下一个data:，分割多包
-                        next_idx = buffer.find("data: ", idx + 6)
-                        if next_idx == -1:
-                            chunk = buffer[idx:]
-                            buffer = ""
-                        else:
-                            chunk = buffer[idx:next_idx]
-                            buffer = buffer[next_idx:]
-                        # 只处理以data:开头的块
-                        if not chunk.startswith("data: "):
+                event_lines = []
+
+                async for raw_chunk in response.content.iter_any():
+                    buffer += decoder.decode(raw_chunk)
+
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.rstrip('\r')
+
+                        if line == "":
+                            event = self._format_sse_event(event_lines)
+                            if event:
+                                yield event
+                            event_lines = []
                             continue
-                        json_str = chunk[6:].strip()
-                        if not json_str or json_str == "[DONE]":
-                            yield chunk.strip()
-                            continue
-                        try:
-                            json.loads(json_str)
-                            yield chunk.strip()
-                        except Exception:
-                            # 还不是完整的JSON，保留buffer等待更多数据
-                            buffer = chunk + buffer
-                            break
+
+                        event_lines.append(line)
+
+                buffer += decoder.decode(b"", final=True)
+                if buffer:
+                    event_lines.append(buffer.rstrip('\r'))
+
+                event = self._format_sse_event(event_lines)
+                if event:
+                    yield event
         
         except asyncio.TimeoutError:
             raise APITimeoutError(f"API异步流式请求超时（{timeout}秒）")
@@ -792,7 +819,17 @@ class DeepseekClient(ModelClient):
         # Deepseek支持的模型列表
         self.supported_models = [
             "deepseek-chat",
-            "deepseek-reasoner"
+            "deepseek-reasoner",
+
+            # SiliconFlow DeepSeek models
+            "deepseek-ai/DeepSeek-V3",
+            "deepseek-ai/DeepSeek-R1",
+            "deepseek-ai/DeepSeek-V3.1",
+            "deepseek-ai/DeepSeek-V3.2",
+            "Pro/deepseek-ai/DeepSeek-V3",
+            "Pro/deepseek-ai/DeepSeek-R1",
+            "Pro/deepseek-ai/DeepSeek-V3.1",
+            "Pro/deepseek-ai/DeepSeek-V3.2",
         ]
         
         # 模型参数限制
@@ -818,9 +855,19 @@ class DeepseekClient(ModelClient):
     def _map_deepseek_model(self, model: str) -> str:
         """将通用模型名映射到DeepSeek特定模型名"""
         model_mapping = {
-            "deepseek": "deepseek-chat",  # 默认映射到chat模型
-            "deepseek-chat": "deepseek-chat",
-            "deepseek-reasoner": "deepseek-reasoner"
+            "deepseek": "deepseek-ai/DeepSeek-V3",
+            "deepseek-chat": "deepseek-ai/DeepSeek-V3",
+            "deepseek-reasoner": "deepseek-ai/DeepSeek-R1",
+
+            # SiliconFlow model names: keep unchanged
+            "deepseek-ai/DeepSeek-V3": "deepseek-ai/DeepSeek-V3",
+            "deepseek-ai/DeepSeek-R1": "deepseek-ai/DeepSeek-R1",
+            "deepseek-ai/DeepSeek-V3.1": "deepseek-ai/DeepSeek-V3.1",
+            "deepseek-ai/DeepSeek-V3.2": "deepseek-ai/DeepSeek-V3.2",
+            "Pro/deepseek-ai/DeepSeek-V3": "Pro/deepseek-ai/DeepSeek-V3",
+            "Pro/deepseek-ai/DeepSeek-R1": "Pro/deepseek-ai/DeepSeek-R1",
+            "Pro/deepseek-ai/DeepSeek-V3.1": "Pro/deepseek-ai/DeepSeek-V3.1",
+            "Pro/deepseek-ai/DeepSeek-V3.2": "Pro/deepseek-ai/DeepSeek-V3.2",
         }
         return model_mapping.get(model, model)
     
@@ -2352,4 +2399,4 @@ class EnhancedModelClient(ModelClient):
     async def aclose(self):
         """异步关闭客户端"""
         await self.connection_pool.close_async_session()
-        await super().aclose() 
+        await super().aclose()
