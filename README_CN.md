@@ -84,6 +84,18 @@ cp config/hotkey_mapping.example.yaml config/hotkey_mapping.yaml
 uv run python main.py
 ```
 
+### 菜单栏控制（SwiftBar）
+
+如果希望避免长期占用一个 Terminal 窗口，可以使用 SwiftBar 菜单栏脚本启动、停止和重载 Prompt GO：
+
+```bash
+scripts/prompt_goctl.sh status
+scripts/prompt_goctl.sh start
+scripts/prompt_goctl.sh stop
+```
+
+完整配置见 [SwiftBar 菜单栏控制](docs/swiftbar_cn.md)。
+
 ### 🔑 获取API密钥
 
 #### Deepseek API
@@ -202,4 +214,4 @@ max_tokens: 2000
 
 Made with ❤️ for the AI community
 
-</div> 
+</div>

@@ -53,6 +53,26 @@ class TemplateDirectoryHandler(FileSystemEventHandler):
 
 class HotkeyListener:
     """全局快捷键监听器"""
+
+    MACOS_VK_MAPPING = {
+        # 数字键 1-9,0
+        18: '1', 19: '2', 20: '3', 21: '4', 23: '5',
+        22: '6', 26: '7', 28: '8', 25: '9', 29: '0',
+        # 字母键 A-Z
+        0: 'a', 11: 'b', 8: 'c', 2: 'd', 14: 'e',
+        3: 'f', 5: 'g', 4: 'h', 34: 'i', 38: 'j',
+        40: 'k', 37: 'l', 46: 'm', 45: 'n', 31: 'o',
+        35: 'p', 12: 'q', 15: 'r', 1: 's', 17: 't',
+        32: 'u', 9: 'v', 13: 'w', 7: 'x', 16: 'y', 6: 'z',
+        # 功能键
+        122: 'f1', 120: 'f2', 99: 'f3', 118: 'f4', 96: 'f5',
+        97: 'f6', 98: 'f7', 100: 'f8', 101: 'f9', 109: 'f10',
+        103: 'f11', 111: 'f12',
+        # 特殊键
+        49: 'space', 48: 'tab', 36: 'enter', 53: 'esc',
+        51: 'backspace', 117: 'delete', 126: 'up', 125: 'down',
+        123: 'left', 124: 'right', 115: 'home', 119: 'end'
+    }
     
     # macOS平台的快捷键映射 (control+option+command对应ctrl+alt+cmd)
     MACOS_KEY_MAPPING = {
@@ -94,6 +114,7 @@ class HotkeyListener:
         self.is_listening = False
         self._pressed_keys = set()
         self._hotkey_handlers: Dict[str, Callable] = {}
+        self._configured_hotkeys: Set[str] = set()
         self._platform = platform.system()
         self._template_observer: Optional[Observer] = None
         self._template_cache: Dict[str, Dict[str, Any]] = {}
@@ -178,6 +199,7 @@ class HotkeyListener:
         """设置快捷键映射"""
         try:
             mappings = self.config_manager.get_all_mappings()
+            self._configured_hotkeys = set(mappings.keys())
             logger.info(f"加载快捷键映射: {len(mappings)} 个快捷键")
             
             # 执行全面的配置验证
@@ -1218,6 +1240,11 @@ class HotkeyListener:
                       Key.cmd, Key.cmd_r, Key.shift, Key.shift_l, Key.shift_r]:
                 continue
                 
+            # macOS上Shift+数字会产生符号字符，优先使用虚拟键码保留原始数字键。
+            if self._platform == "Darwin" and hasattr(key, 'vk') and key.vk in self.MACOS_VK_MAPPING:
+                main_key = self.MACOS_VK_MAPPING[key.vk]
+                break
+
             # 处理字符键
             if hasattr(key, 'char') and key.char:
                 if key.char.isprintable():
@@ -1232,29 +1259,8 @@ class HotkeyListener:
                 
             # 处理KeyCode类型的键
             elif hasattr(key, 'vk'):
-                # macOS键盘虚拟键码映射
-                vk_mapping = {
-                    # 数字键 1-9,0
-                    18: '1', 19: '2', 20: '3', 21: '4', 23: '5',
-                    22: '6', 26: '7', 28: '8', 25: '9', 29: '0',
-                    # 字母键 A-Z  
-                    0: 'a', 11: 'b', 8: 'c', 2: 'd', 14: 'e',
-                    3: 'f', 5: 'g', 4: 'h', 34: 'i', 38: 'j',
-                    40: 'k', 37: 'l', 46: 'm', 45: 'n', 31: 'o',
-                    35: 'p', 12: 'q', 15: 'r', 1: 's', 17: 't',
-                    32: 'u', 9: 'v', 13: 'w', 7: 'x', 16: 'y', 6: 'z',
-                    # 功能键
-                    122: 'f1', 120: 'f2', 99: 'f3', 118: 'f4', 96: 'f5',
-                    97: 'f6', 98: 'f7', 100: 'f8', 101: 'f9', 109: 'f10',
-                    103: 'f11', 111: 'f12',
-                    # 特殊键
-                    49: 'space', 48: 'tab', 36: 'enter', 53: 'esc',
-                    51: 'backspace', 117: 'delete', 126: 'up', 125: 'down',
-                    123: 'left', 124: 'right', 115: 'home', 119: 'end'
-                }
-                
-                if key.vk in vk_mapping:
-                    main_key = vk_mapping[key.vk]
+                if key.vk in self.MACOS_VK_MAPPING:
+                    main_key = self.MACOS_VK_MAPPING[key.vk]
                     break
         
         # 如果没有找到主键，返回None
@@ -1265,8 +1271,8 @@ class HotkeyListener:
         if not modifiers:
             return None
             
-        # 构建快捷键字符串
-        modifiers.sort()  # 确保一致的顺序
+        # 构建快捷键字符串。修饰键按配置中常见的顺序追加，避免字母序导致
+        # ctrl+alt+cmd 被标准化为 alt+cmd+ctrl。
         return '+'.join(modifiers + [main_key])
     
     def _on_press(self, key):
@@ -1285,7 +1291,11 @@ class HotkeyListener:
             hotkey = self._normalize_hotkey(self._pressed_keys)
             if hotkey:
                 logger.debug(f"检测到快捷键: {hotkey} (平台: {self._platform})")
-                self._handle_hotkey(hotkey)
+
+                if hotkey in self._configured_hotkeys:
+                    self._handle_hotkey(hotkey)
+                else:
+                    logger.debug(f"忽略未配置的快捷键组合: {hotkey}")
                 
                 # 防止重复触发，清除已按下的按键
                 self._pressed_keys.clear()
@@ -1598,9 +1608,6 @@ class HotkeyListener:
             hotkey: 快捷键字符串
         """
         try:
-            # 更新统计
-            self._listening_statistics['total_hotkeys_processed'] += 1
-            
             # 检查快捷键是否启用
             if not self.config_manager.get('settings.enabled', True):
                 logger.debug("快捷键监听已禁用")
@@ -1608,8 +1615,10 @@ class HotkeyListener:
                 
             template = self.config_manager.get_template_for_hotkey(hotkey)
             if not template:
-                logger.warning(f"未找到快捷键对应的模板: {hotkey}")
+                logger.debug(f"未找到快捷键对应的模板: {hotkey}")
                 return
+
+            self._listening_statistics['total_hotkeys_processed'] += 1
                 
             # 验证模板文件是否存在
             if not self._is_template_valid(template):
