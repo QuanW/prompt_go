@@ -54,3 +54,22 @@ scripts/prompt_goctl.sh restart
 - 系统设置 -> 隐私与安全性 -> 输入监控
 
 如果仍然从 Terminal 启动，则权限应授予 Terminal 或 iTerm2。
+
+如果日志中出现下面的警告，说明 macOS 没有把键盘事件交给当前启动宿主：
+
+```text
+This process is not trusted! Input event monitoring will not be possible
+```
+
+处理方式：
+
+1. 完全退出 SwiftBar。
+2. 在“辅助功能”和“输入监控”中授予 SwiftBar 权限。
+3. 如果仍然无效，点击 SwiftBar 菜单中的 Doctor，查看实际使用的 Python 路径，并把该 Python 可执行文件也加入上述权限列表。
+4. 重新打开 SwiftBar，再启动 Prompt GO。
+
+可以手动运行诊断：
+
+```bash
+scripts/prompt_goctl.sh doctor
+```

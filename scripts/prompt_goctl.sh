@@ -120,6 +120,32 @@ restart() {
   start
 }
 
+doctor() {
+  echo "Prompt GO diagnostics"
+  echo "Project: $PROJECT_DIR"
+  echo "Python: $PYTHON_BIN"
+  echo "Status: $(status)"
+  echo
+
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    echo "macOS permissions required for the app that starts Prompt GO:"
+    echo "- Accessibility"
+    echo "- Input Monitoring"
+    echo
+    echo "If started from SwiftBar, grant permissions to SwiftBar."
+    echo "If macOS still reports the process as untrusted, also add this Python executable:"
+    echo "$PYTHON_BIN"
+    echo
+  fi
+
+  if [[ -f "$LOG_FILE" ]] && tail -n 200 "$LOG_FILE" | grep -qi "not trusted"; then
+    echo "Recent log warning: input monitoring is not trusted."
+    echo "Open System Settings -> Privacy & Security and update permissions, then fully quit and reopen the launcher app."
+  else
+    echo "No recent input-monitoring trust warning found in the log."
+  fi
+}
+
 case "${1:-status}" in
   start)
     start
@@ -139,8 +165,11 @@ case "${1:-status}" in
   log)
     tail -n "${2:-80}" "$LOG_FILE"
     ;;
+  doctor)
+    doctor
+    ;;
   *)
-    echo "Usage: $0 {start|stop|restart|reload|status|log}" >&2
+    echo "Usage: $0 {start|stop|restart|reload|status|log|doctor}" >&2
     exit 2
     ;;
 esac

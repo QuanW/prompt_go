@@ -13,13 +13,27 @@ if [[ ! -x "$CTL" ]]; then
 fi
 
 STATUS="$("$CTL" status 2>/dev/null || echo "error")"
+PERMISSION_WARNING=""
+
+if [[ -f "$LOG_FILE" ]] && tail -n 200 "$LOG_FILE" | grep -qi "not trusted"; then
+  PERMISSION_WARNING="yes"
+fi
 
 case "$STATUS" in
   running*)
     PID="${STATUS#running }"
-    echo "Prompt GO: running"
+    if [[ "$PERMISSION_WARNING" == "yes" ]]; then
+      echo "Prompt GO: permissions"
+    else
+      echo "Prompt GO: running"
+    fi
     echo "---"
     echo "PID: $PID"
+    if [[ "$PERMISSION_WARNING" == "yes" ]]; then
+      echo "Keyboard permission may be missing"
+      echo "Run Doctor | bash=\"$CTL\" param1=doctor terminal=true refresh=false"
+      echo "---"
+    fi
     echo "Stop | bash=\"$CTL\" param1=stop terminal=false refresh=true"
     echo "Restart | bash=\"$CTL\" param1=restart terminal=false refresh=true"
     echo "Reload Config | bash=\"$CTL\" param1=reload terminal=false refresh=true"
@@ -45,6 +59,7 @@ case "$STATUS" in
 esac
 
 echo "---"
+echo "Doctor | bash=\"$CTL\" param1=doctor terminal=true refresh=false"
 echo "Open Project | bash=open param1=\"$PROMPT_GO_DIR\" terminal=false"
 echo "Open Log | bash=open param1=\"$LOG_FILE\" terminal=false"
 echo "Tail Log | bash=\"$CTL\" param1=log terminal=true refresh=false"
