@@ -13,6 +13,7 @@ if [[ ! -x "$CTL" ]]; then
 fi
 
 STATUS="$("$CTL" status 2>/dev/null || echo "error")"
+AGENT_STATUS="$("$CTL" agent-status 2>/dev/null || echo "unknown")"
 PERMISSION_WARNING=""
 
 if [[ -f "$LOG_FILE" ]] && tail -n 200 "$LOG_FILE" | grep -qi "not trusted"; then
@@ -29,6 +30,7 @@ case "$STATUS" in
     fi
     echo "---"
     echo "PID: $PID"
+    echo "Agent: $AGENT_STATUS"
     if [[ "$PERMISSION_WARNING" == "yes" ]]; then
       echo "Keyboard permission may be missing"
       echo "Run Doctor | bash=\"$CTL\" param1=doctor terminal=true refresh=false"
@@ -43,12 +45,14 @@ case "$STATUS" in
     echo "Prompt GO: stale"
     echo "---"
     echo "Stale PID: $PID"
+    echo "Agent: $AGENT_STATUS"
     echo "Start | bash=\"$CTL\" param1=start terminal=false refresh=true"
     echo "Restart | bash=\"$CTL\" param1=restart terminal=false refresh=true"
     ;;
   stopped)
     echo "Prompt GO: stopped"
     echo "---"
+    echo "Agent: $AGENT_STATUS"
     echo "Start | bash=\"$CTL\" param1=start terminal=false refresh=true"
     ;;
   *)
@@ -59,6 +63,14 @@ case "$STATUS" in
 esac
 
 echo "---"
+case "$AGENT_STATUS" in
+  not-installed)
+    echo "Install LaunchAgent | bash=\"$CTL\" param1=install-agent terminal=true refresh=true"
+    ;;
+  *)
+    echo "Uninstall LaunchAgent | bash=\"$CTL\" param1=uninstall-agent terminal=true refresh=true"
+    ;;
+esac
 echo "Doctor | bash=\"$CTL\" param1=doctor terminal=true refresh=false"
 echo "Open Project | bash=open param1=\"$PROMPT_GO_DIR\" terminal=false"
 echo "Open Log | bash=open param1=\"$LOG_FILE\" terminal=false"

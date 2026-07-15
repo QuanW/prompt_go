@@ -1,6 +1,6 @@
 # SwiftBar 菜单栏控制
 
-Prompt GO 可以通过 SwiftBar 在菜单栏中启动、停止、重启和重载配置。
+Prompt GO 可以通过 SwiftBar 在菜单栏中启动、停止、重启和重载配置。推荐进一步安装 macOS LaunchAgent，让 launchd 管理后台进程，SwiftBar 只负责控制和查看状态。
 
 ## 前提
 
@@ -46,6 +46,51 @@ scripts/prompt_goctl.sh stop
 scripts/prompt_goctl.sh restart
 ```
 
+## 安装 LaunchAgent
+
+安装后，Prompt GO 会由 macOS launchd 管理。SwiftBar 菜单里的 Start、Stop、Restart 会自动切换为控制 LaunchAgent。
+
+```bash
+scripts/prompt_goctl.sh install-agent
+scripts/prompt_goctl.sh start
+scripts/prompt_goctl.sh status
+```
+
+卸载：
+
+```bash
+scripts/prompt_goctl.sh uninstall-agent
+```
+
+安装位置：
+
+```text
+~/Library/LaunchAgents/com.quanw.prompt-go.plist
+```
+
+LaunchAgent 会使用当前项目里的 `.venv/bin/python`、`main.py`、`config` 和 `prompt` 目录。如果更换项目路径或虚拟环境，请重新运行 `install-agent` 生成新的 plist。
+
+如果项目位于 `Downloads`、`Desktop` 或 `Documents` 等 macOS 隐私保护目录，LaunchAgent 启动的 Python 可能会遇到文件访问限制，例如：
+
+```text
+PermissionError: [Errno 1] Operation not permitted: '.venv/pyvenv.cfg'
+```
+
+更推荐把项目放到不受隐私保护拦截的开发目录，例如：
+
+```text
+~/Developer/prompt_go
+```
+
+迁移目录后重新执行：
+
+```bash
+scripts/prompt_goctl.sh uninstall-agent
+scripts/prompt_goctl.sh install-agent
+```
+
+如果暂时不迁移目录，`prompt_goctl.sh start` 会在 LaunchAgent 启动失败时回退到 SwiftBar 直启模式。
+
 ## macOS 权限
 
 如果通过 SwiftBar 启动 Prompt GO，需要给 SwiftBar 授予必要权限：
@@ -54,6 +99,18 @@ scripts/prompt_goctl.sh restart
 - 系统设置 -> 隐私与安全性 -> 输入监控
 
 如果仍然从 Terminal 启动，则权限应授予 Terminal 或 iTerm2。
+
+如果通过 LaunchAgent 启动，macOS 可能会要求给实际的 Python 可执行文件授权。可以通过 Doctor 查看路径：
+
+```bash
+scripts/prompt_goctl.sh doctor
+```
+
+通常是：
+
+```text
+/Users/wquan/Downloads/softwares/prompt_go/.venv/bin/python
+```
 
 如果日志中出现下面的警告，说明 macOS 没有把键盘事件交给当前启动宿主：
 
