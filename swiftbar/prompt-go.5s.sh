@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-PROMPT_GO_DIR="${PROMPT_GO_DIR:-/Users/wquan/Downloads/softwares/prompt_go}"
+PROMPT_GO_DIR="${PROMPT_GO_DIR:-/Users/wquan/Developer/prompt_go}"
 CTL="$PROMPT_GO_DIR/scripts/prompt_goctl.sh"
 LOG_FILE="$PROMPT_GO_DIR/prompt_manager.log"
 

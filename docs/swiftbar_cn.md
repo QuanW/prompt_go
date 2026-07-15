@@ -7,7 +7,7 @@ Prompt GO 可以通过 SwiftBar 在菜单栏中启动、停止、重启和重载
 先在项目目录中准备好虚拟环境和依赖：
 
 ```bash
-cd /Users/wquan/Downloads/softwares/prompt_go
+cd /Users/wquan/Developer/prompt_go
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
@@ -22,14 +22,14 @@ python -m pip install -r requirements.txt
 3. 将插件脚本复制或软链接到插件目录：
 
 ```bash
-ln -sf /Users/wquan/Downloads/softwares/prompt_go/swiftbar/prompt-go.5s.sh ~/SwiftBarPlugins/prompt-go.5s.sh
+ln -sf /Users/wquan/Developer/prompt_go/swiftbar/prompt-go.5s.sh ~/SwiftBarPlugins/prompt-go.5s.sh
 ```
 
 4. 确保脚本可执行：
 
 ```bash
-chmod +x /Users/wquan/Downloads/softwares/prompt_go/scripts/prompt_goctl.sh
-chmod +x /Users/wquan/Downloads/softwares/prompt_go/swiftbar/prompt-go.5s.sh
+chmod +x /Users/wquan/Developer/prompt_go/scripts/prompt_goctl.sh
+chmod +x /Users/wquan/Developer/prompt_go/swiftbar/prompt-go.5s.sh
 ```
 
 如果你的项目目录不同，可以在 SwiftBar 启动环境中设置 `PROMPT_GO_DIR`，或直接编辑 `swiftbar/prompt-go.5s.sh` 顶部的默认路径。
@@ -109,7 +109,7 @@ scripts/prompt_goctl.sh doctor
 通常是：
 
 ```text
-/Users/wquan/Downloads/softwares/prompt_go/.venv/bin/python
+/Users/wquan/Developer/prompt_go/.venv/bin/python
 ```
 
 如果日志中出现下面的警告，说明 macOS 没有把键盘事件交给当前启动宿主：

@@ -25,10 +25,17 @@ read_pid() {
   fi
 }
 
+pid_matches_app() {
+  local pid="$1"
+  local command
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ "$command" == *"$PROJECT_DIR/main.py"* ]]
+}
+
 is_running() {
   local pid
   pid="$(read_pid || true)"
-  [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null
+  [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null && pid_matches_app "$pid"
 }
 
 is_macos() {
@@ -64,6 +71,10 @@ agent_bootstrap() {
 }
 
 cleanup_stale_pid() {
+  if agent_running; then
+    return 0
+  fi
+
   if [[ -f "$PID_FILE" ]] && ! is_running; then
     rm -f "$PID_FILE"
   fi
@@ -73,7 +84,9 @@ status() {
   local pid
   pid="$(read_pid || true)"
 
-  if is_running; then
+  if agent_running; then
+    echo "running ${pid:-launchagent}"
+  elif is_running; then
     echo "running ${pid}"
   elif [[ -n "${pid:-}" ]]; then
     echo "stale ${pid}"
@@ -141,7 +154,7 @@ stop() {
   local pid
   pid="$(read_pid || true)"
 
-  if ! is_running; then
+  if ! is_running && ! agent_running; then
     [[ -f "$PID_FILE" ]] && rm -f "$PID_FILE"
     echo "Prompt GO is not running."
     return 0
@@ -149,7 +162,7 @@ stop() {
 
   if agent_installed && agent_running; then
     launchctl kill TERM "$LAUNCH_DOMAIN/$LAUNCH_AGENT_LABEL"
-  else
+  elif [[ -n "${pid:-}" ]]; then
     kill -TERM "$pid"
   fi
 
@@ -317,12 +330,12 @@ doctor() {
   fi
 
   if [[ -f "$PROJECT_DIR/launchd.stderr.log" ]] \
-    && tail -n 80 "$PROJECT_DIR/launchd.stderr.log" | grep -q "Operation not permitted"; then
+    && tail -n 80 "$PROJECT_DIR/launchd.stderr.log" | grep "Operation not permitted" | grep -q "$PROJECT_DIR"; then
     echo
     echo "Recent LaunchAgent permission error found."
-    echo "macOS may block LaunchAgent/Python from reading this project under protected folders such as Downloads."
+    echo "macOS may block LaunchAgent/Python from reading the current project path."
     echo "Recommended fixes:"
-    echo "- Move the project to a developer folder outside Downloads, for example ~/Developer/prompt_go, then reinstall the agent."
+    echo "- Move the project to a developer folder outside protected folders, then reinstall the agent."
     echo "- Or grant Full Disk Access / Files and Folders access to the Python executable shown above."
   fi
 }

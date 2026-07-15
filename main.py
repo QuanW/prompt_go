@@ -547,11 +547,23 @@ class PromptManager:
             if pid_path.exists():
                 try:
                     existing_pid = int(pid_path.read_text().strip())
-                    # 检查进程是否仍在运行
+                    # 检查PID是否仍指向当前程序。仅 pid_exists 不够，迁移目录后旧PID可能被系统复用。
                     import psutil
                     if psutil.pid_exists(existing_pid):
-                        logger.error(f"程序已在运行 (PID: {existing_pid})")
-                        return False
+                        try:
+                            process = psutil.Process(existing_pid)
+                            cmdline = " ".join(process.cmdline())
+                            current_main = str(Path(__file__).resolve())
+
+                            if current_main in cmdline:
+                                logger.error(f"程序已在运行 (PID: {existing_pid})")
+                                return False
+
+                            logger.warning(f"PID文件指向其他进程，将删除: {pid_file_path} (PID: {existing_pid})")
+                            pid_path.unlink()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
+                            logger.warning(f"无法确认PID文件对应进程，将删除: {pid_file_path} ({e})")
+                            pid_path.unlink()
                     else:
                         logger.warning(f"发现过期的PID文件，将删除: {pid_file_path}")
                         pid_path.unlink()
