@@ -322,11 +322,19 @@ doctor() {
     echo
   fi
 
-  if [[ -f "$LOG_FILE" ]] && tail -n 200 "$LOG_FILE" | grep -qi "not trusted"; then
-    echo "Recent log warning: input monitoring is not trusted."
-    echo "Open System Settings -> Privacy & Security and update permissions, then fully quit and reopen the launcher app."
+  if [[ -f "$LOG_FILE" ]]; then
+    RECENT_LOG="$(tail -n 200 "$LOG_FILE" 2>/dev/null || true)"
+    LAST_BACKEND="$(printf '%s
+' "$RECENT_LOG" | awk '/全局快捷键监听器启动成功/ { line=$0 } END { print line }')"
+    if [[ "$LAST_BACKEND" == *"后端: pynput"* ]] && printf '%s
+' "$RECENT_LOG" | grep -qi "not trusted"; then
+      echo "Recent log warning: input monitoring is not trusted."
+      echo "Open System Settings -> Privacy & Security and update permissions, then fully quit and reopen the launcher app."
+    else
+      echo "No active pynput input-monitoring trust warning found in the recent log."
+    fi
   else
-    echo "No recent input-monitoring trust warning found in the log."
+    echo "Log file not found yet."
   fi
 
   if [[ -f "$PROJECT_DIR/launchd.stderr.log" ]] \

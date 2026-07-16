@@ -14,6 +14,8 @@ import json
 import subprocess
 import sys
 import os
+import socket
+import tempfile
 import ctypes
 import ctypes.util
 from typing import Dict, Callable, Optional, Any, Set, List, Tuple
@@ -316,6 +318,151 @@ class MacOSNativeHotkeyRegistrar:
             return None
 
         return self.KEY_CODES[key_name], modifiers
+
+
+class MacOSNativeHotkeyHelperBackend:
+    """通过C helper注册macOS原生热键，并通过Unix socket回调Python。"""
+
+    def __init__(self, hotkeys: Set[str], callback: Callable[[str], None]):
+        self.hotkeys = set(hotkeys)
+        self.callback = callback
+        self._thread: Optional[threading.Thread] = None
+        self._process: Optional[subprocess.Popen] = None
+        self._socket: Optional[socket.socket] = None
+        self._socket_path: Optional[str] = None
+        self._running = False
+
+    def start(self) -> bool:
+        if self._thread and self._thread.is_alive():
+            return True
+
+        supported_hotkeys = sorted(hotkey for hotkey in self.hotkeys if hotkey)
+        if not supported_hotkeys:
+            return False
+
+        try:
+            helper_path = self._ensure_helper_binary()
+            self._socket_path = os.path.join(
+                tempfile.gettempdir(),
+                f"prompt_go_hotkeys_{os.getpid()}_{id(self)}.sock"
+            )
+            try:
+                os.unlink(self._socket_path)
+            except FileNotFoundError:
+                pass
+
+            self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            self._socket.bind(self._socket_path)
+            self._socket.settimeout(0.5)
+
+            self._process = subprocess.Popen(
+                [str(helper_path), self._socket_path, *supported_hotkeys],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            time.sleep(0.3)
+            if self._process.poll() is not None:
+                stderr = self._process.stderr.read() if self._process.stderr else ''
+                logger.warning(f"macOS原生热键helper启动失败: {stderr.strip()}")
+                self.stop()
+                return False
+
+            self._running = True
+            self._thread = threading.Thread(
+                target=self._socket_loop,
+                daemon=True,
+                name='MacOSNativeHotkeyHelperSocket'
+            )
+            self._thread.start()
+            logger.info(f"macOS原生热键helper启动成功: {len(supported_hotkeys)} 个快捷键")
+            return True
+
+        except Exception as e:
+            logger.warning(f"macOS原生热键helper不可用: {e}")
+            self.stop()
+            return False
+
+    def stop(self) -> None:
+        self._running = False
+
+        if self._process and self._process.poll() is None:
+            self._process.terminate()
+            try:
+                self._process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+                self._process.wait(timeout=1.0)
+        self._process = None
+
+        if self._socket:
+            try:
+                self._socket.close()
+            except OSError:
+                pass
+        self._socket = None
+
+        if self._socket_path:
+            try:
+                os.unlink(self._socket_path)
+            except FileNotFoundError:
+                pass
+        self._socket_path = None
+
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1.0)
+        self._thread = None
+
+    def update_hotkeys(self, hotkeys: Set[str]) -> bool:
+        was_running = self._thread is not None and self._thread.is_alive()
+        if was_running:
+            self.stop()
+        self.hotkeys = set(hotkeys)
+        if was_running:
+            return self.start()
+        return True
+
+    def _socket_loop(self) -> None:
+        while self._running and self._socket:
+            try:
+                data = self._socket.recv(256)
+                hotkey = data.decode('utf-8', errors='replace').strip()
+                if hotkey:
+                    self.callback(hotkey)
+            except socket.timeout:
+                if self._process and self._process.poll() is not None:
+                    logger.warning("macOS原生热键helper已退出")
+                    self._running = False
+                continue
+            except OSError:
+                if self._running:
+                    logger.warning("macOS原生热键helper socket已关闭")
+                break
+            except Exception as e:
+                logger.error(f"处理macOS原生热键事件失败: {e}")
+
+    def _ensure_helper_binary(self) -> Path:
+        project_dir = Path(__file__).resolve().parent.parent
+        source_path = project_dir / 'native' / 'macos_hotkey_helper.c'
+        binary_path = project_dir / 'bin' / 'macos_hotkey_helper'
+
+        if not source_path.exists():
+            raise FileNotFoundError(f"缺少helper源码: {source_path}")
+
+        needs_build = (
+            not binary_path.exists()
+            or source_path.stat().st_mtime > binary_path.stat().st_mtime
+        )
+        if needs_build:
+            binary_path.parent.mkdir(exist_ok=True)
+            subprocess.run(
+                ['clang', str(source_path), '-framework', 'Carbon', '-framework', 'CoreFoundation', '-o', str(binary_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        return binary_path
 
 
 class HotkeyListener:
@@ -2749,10 +2896,10 @@ class HotkeyListener:
         if env_value is not None:
             return env_value.lower() in {'1', 'true', 'yes', 'on'}
 
-        return bool(self.config_manager.get('settings.native_hotkeys', False))
+        return bool(self.config_manager.get('settings.native_hotkeys', True))
 
     def _start_native_hotkey_listener(self) -> bool:
-        registrar = MacOSNativeHotkeyRegistrar(self._configured_hotkeys, self._handle_hotkey)
+        registrar = MacOSNativeHotkeyHelperBackend(self._configured_hotkeys, self._handle_hotkey)
         if not registrar.start():
             logger.warning("macOS原生热键后端不可用，回退到pynput监听器")
             return False

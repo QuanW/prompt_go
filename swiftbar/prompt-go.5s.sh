@@ -16,8 +16,14 @@ STATUS="$("$CTL" status 2>/dev/null || echo "error")"
 AGENT_STATUS="$("$CTL" agent-status 2>/dev/null || echo "unknown")"
 PERMISSION_WARNING=""
 
-if [[ -f "$LOG_FILE" ]] && tail -n 200 "$LOG_FILE" | grep -qi "not trusted"; then
-  PERMISSION_WARNING="yes"
+if [[ -f "$LOG_FILE" ]]; then
+  RECENT_LOG="$(tail -n 200 "$LOG_FILE" 2>/dev/null || true)"
+  LAST_BACKEND="$(printf '%s
+' "$RECENT_LOG" | awk '/全局快捷键监听器启动成功/ { line=$0 } END { print line }')"
+  if [[ "$LAST_BACKEND" == *"后端: pynput"* ]] && printf '%s
+' "$RECENT_LOG" | grep -qi "not trusted"; then
+    PERMISSION_WARNING="yes"
+  fi
 fi
 
 case "$STATUS" in
