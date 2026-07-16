@@ -257,6 +257,7 @@ class MacOSNativeHotkeyRegistrar:
             if status == 0:
                 hotkey = self._id_to_hotkey.get(hotkey_id.id)
                 if hotkey:
+                    logger.info(f"收到macOS原生热键事件: {hotkey}")
                     self.callback(hotkey)
             return 0
 
@@ -428,6 +429,7 @@ class MacOSNativeHotkeyHelperBackend:
                 data = self._socket.recv(256)
                 hotkey = data.decode('utf-8', errors='replace').strip()
                 if hotkey:
+                    logger.info(f"收到macOS原生热键helper事件: {hotkey}")
                     self.callback(hotkey)
             except socket.timeout:
                 if self._process and self._process.poll() is not None:
@@ -444,7 +446,7 @@ class MacOSNativeHotkeyHelperBackend:
     def _ensure_helper_binary(self) -> Path:
         project_dir = Path(__file__).resolve().parent.parent
         source_path = project_dir / 'native' / 'macos_hotkey_helper.c'
-        binary_path = project_dir / 'bin' / 'macos_hotkey_helper'
+        binary_path = project_dir / '.cache' / 'prompt_go' / 'macos_hotkey_helper'
 
         if not source_path.exists():
             raise FileNotFoundError(f"缺少helper源码: {source_path}")
@@ -454,7 +456,7 @@ class MacOSNativeHotkeyHelperBackend:
             or source_path.stat().st_mtime > binary_path.stat().st_mtime
         )
         if needs_build:
-            binary_path.parent.mkdir(exist_ok=True)
+            binary_path.parent.mkdir(parents=True, exist_ok=True)
             subprocess.run(
                 ['clang', str(source_path), '-framework', 'Carbon', '-framework', 'CoreFoundation', '-o', str(binary_path)],
                 check=True,
@@ -2896,7 +2898,7 @@ class HotkeyListener:
         if env_value is not None:
             return env_value.lower() in {'1', 'true', 'yes', 'on'}
 
-        return bool(self.config_manager.get('settings.native_hotkeys', True))
+        return bool(self.config_manager.get('settings.native_hotkeys', False))
 
     def _start_native_hotkey_listener(self) -> bool:
         registrar = MacOSNativeHotkeyHelperBackend(self._configured_hotkeys, self._handle_hotkey)

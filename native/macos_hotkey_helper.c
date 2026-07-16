@@ -6,7 +6,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include <CoreFoundation/CoreFoundation.h>
 
 #define MAX_HOTKEYS 64
 #define HOTKEY_NAME_LEN 128
@@ -23,13 +22,11 @@ static struct sockaddr_un socket_addr;
 static socklen_t socket_addr_len = 0;
 static HotkeyRegistration registrations[MAX_HOTKEYS];
 static int registration_count = 0;
-static CFRunLoopRef run_loop = NULL;
+static volatile sig_atomic_t should_stop = 0;
 
 static void handle_signal(int signal_number) {
     (void)signal_number;
-    if (run_loop) {
-        CFRunLoopStop(run_loop);
-    }
+    should_stop = 1;
 }
 
 static int key_code_for_name(const char *name, UInt32 *key_code) {
@@ -150,7 +147,8 @@ int main(int argc, char *argv[]) {
     socket_addr_len = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + strlen(socket_addr.sun_path));
 
     EventTypeSpec event_type = { kEventClassKeyboard, kEventHotKeyPressed };
-    OSStatus status = InstallEventHandler(GetApplicationEventTarget(), hotkey_handler, 1, &event_type, NULL, NULL);
+    EventTargetRef target = GetEventDispatcherTarget();
+    OSStatus status = InstallEventHandler(target, hotkey_handler, 1, &event_type, NULL, NULL);
     if (status != noErr) {
         fprintf(stderr, "InstallEventHandler failed: %d\n", (int)status);
         return 1;
@@ -165,7 +163,7 @@ int main(int argc, char *argv[]) {
         }
 
         EventHotKeyID hotkey_id = { SIGNATURE, (UInt32)(registration_count + 1) };
-        status = RegisterEventHotKey(key_code, modifiers, hotkey_id, GetApplicationEventTarget(), 0, &registrations[registration_count].ref);
+        status = RegisterEventHotKey(key_code, modifiers, hotkey_id, target, 0, &registrations[registration_count].ref);
         if (status != noErr) {
             fprintf(stderr, "RegisterEventHotKey failed for %s: %d\n", argv[arg], (int)status);
             continue;
@@ -183,8 +181,15 @@ int main(int argc, char *argv[]) {
 
     printf("registered %d hotkeys\n", registration_count);
     fflush(stdout);
-    run_loop = CFRunLoopGetCurrent();
-    CFRunLoopRun();
+
+    while (!should_stop) {
+        EventRef event = NULL;
+        status = ReceiveNextEvent(0, NULL, 1.0, true, &event);
+        if (status == noErr && event) {
+            SendEventToEventTarget(event, target);
+            ReleaseEvent(event);
+        }
+    }
 
     for (int i = 0; i < registration_count; i++) {
         if (registrations[i].ref) {

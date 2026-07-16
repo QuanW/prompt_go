@@ -20,8 +20,13 @@ if [[ -f "$LOG_FILE" ]]; then
   RECENT_LOG="$(tail -n 200 "$LOG_FILE" 2>/dev/null || true)"
   LAST_BACKEND="$(printf '%s
 ' "$RECENT_LOG" | awk '/全局快捷键监听器启动成功/ { line=$0 } END { print line }')"
-  if [[ "$LAST_BACKEND" == *"后端: pynput"* ]] && printf '%s
-' "$RECENT_LOG" | grep -qi "not trusted"; then
+  TRUST_WARNING_ACTIVE="$(printf '%s
+' "$RECENT_LOG" | awk '
+    /not trusted/ { warning = 1 }
+    /触发快捷键:/ { warning = 0 }
+    END { if (warning) print "yes" }
+  ')"
+  if [[ "$LAST_BACKEND" == *"后端: pynput"* ]] && [[ "$TRUST_WARNING_ACTIVE" == "yes" ]]; then
     PERMISSION_WARNING="yes"
   fi
 fi
