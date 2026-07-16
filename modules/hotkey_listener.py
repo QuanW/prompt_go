@@ -446,7 +446,7 @@ class MacOSNativeHotkeyHelperBackend:
     def _ensure_helper_binary(self) -> Path:
         project_dir = Path(__file__).resolve().parent.parent
         source_path = project_dir / 'native' / 'macos_hotkey_helper.c'
-        binary_path = project_dir / '.cache' / 'prompt_go' / 'macos_hotkey_helper'
+        binary_path = project_dir / 'bin' / 'macos_hotkey_helper'
 
         if not source_path.exists():
             raise FileNotFoundError(f"缺少helper源码: {source_path}")
@@ -456,7 +456,7 @@ class MacOSNativeHotkeyHelperBackend:
             or source_path.stat().st_mtime > binary_path.stat().st_mtime
         )
         if needs_build:
-            binary_path.parent.mkdir(parents=True, exist_ok=True)
+            binary_path.parent.mkdir(exist_ok=True)
             subprocess.run(
                 ['clang', str(source_path), '-framework', 'Carbon', '-framework', 'CoreFoundation', '-o', str(binary_path)],
                 check=True,

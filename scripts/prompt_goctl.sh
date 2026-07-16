@@ -306,6 +306,11 @@ doctor() {
   echo "Prompt GO diagnostics"
   echo "Project: $PROJECT_DIR"
   echo "Python: $PYTHON_BIN"
+  RESOLVED_PYTHON="$PYTHON_BIN"
+  if command -v readlink >/dev/null 2>&1; then
+    RESOLVED_PYTHON="$(readlink -f "$PYTHON_BIN" 2>/dev/null || printf '%s' "$PYTHON_BIN")"
+  fi
+  echo "Resolved Python: $RESOLVED_PYTHON"
   echo "Status: $(status)"
   echo "LaunchAgent: $(agent_status)"
   echo
@@ -317,8 +322,11 @@ doctor() {
     echo
     echo "If started from SwiftBar, grant permissions to SwiftBar."
     echo "If started from LaunchAgent, macOS may require permissions for the Python executable."
-    echo "If macOS still reports the process as untrusted, also add this Python executable:"
+    echo "If macOS still reports the process as untrusted, also add these Python executables:"
     echo "$PYTHON_BIN"
+    if [[ "$RESOLVED_PYTHON" != "$PYTHON_BIN" ]]; then
+      echo "$RESOLVED_PYTHON"
+    fi
     echo
   fi
 
