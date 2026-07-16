@@ -13,6 +13,9 @@ import datetime
 import json
 import subprocess
 import sys
+import os
+import ctypes
+import ctypes.util
 from typing import Dict, Callable, Optional, Any, Set, List, Tuple
 from pathlib import Path
 from pynput import keyboard
@@ -49,6 +52,270 @@ class TemplateDirectoryHandler(FileSystemEventHandler):
         if event.src_path.endswith('.md'):
             logger.info(f"检测到模板文件变化: {event.src_path}")
             self.hotkey_listener._update_template_mappings()
+
+
+class MacOSNativeHotkeyRegistrar:
+    """macOS原生全局快捷键注册器，避免监听所有键盘输入。"""
+
+    SIGNATURE = int.from_bytes(b'PGHK', byteorder='big')
+    EVENT_CLASS_KEYBOARD = int.from_bytes(b'keyb', byteorder='big')
+    EVENT_HOTKEY_PRESSED = 5
+    EVENT_PARAM_DIRECT_OBJECT = int.from_bytes(b'----', byteorder='big')
+    TYPE_EVENT_HOTKEY_ID = int.from_bytes(b'hkid', byteorder='big')
+
+    MODIFIER_CODES = {
+        'cmd': 1 << 8,
+        'shift': 1 << 9,
+        'alt': 1 << 11,
+        'ctrl': 1 << 12,
+    }
+
+    KEY_CODES = {
+        **{str(i): code for i, code in {
+            1: 18, 2: 19, 3: 20, 4: 21, 5: 23,
+            6: 22, 7: 26, 8: 28, 9: 25, 0: 29,
+        }.items()},
+        **{letter: code for letter, code in {
+            'a': 0, 'b': 11, 'c': 8, 'd': 2, 'e': 14,
+            'f': 3, 'g': 5, 'h': 4, 'i': 34, 'j': 38,
+            'k': 40, 'l': 37, 'm': 46, 'n': 45, 'o': 31,
+            'p': 35, 'q': 12, 'r': 15, 's': 1, 't': 17,
+            'u': 32, 'v': 9, 'w': 13, 'x': 7, 'y': 16, 'z': 6,
+        }.items()},
+        **{f'f{i}': code for i, code in {
+            1: 122, 2: 120, 3: 99, 4: 118, 5: 96, 6: 97,
+            7: 98, 8: 100, 9: 101, 10: 109, 11: 103, 12: 111,
+        }.items()},
+        'space': 49,
+        'tab': 48,
+        'enter': 36,
+        'esc': 53,
+        'escape': 53,
+    }
+
+    KEY_ALIASES = {
+        'control': 'ctrl',
+        'ctl': 'ctrl',
+        'option': 'alt',
+        'opt': 'alt',
+        'command': 'cmd',
+        'super': 'cmd',
+        'return': 'enter',
+    }
+
+    class EventTypeSpec(ctypes.Structure):
+        _fields_ = [
+            ('eventClass', ctypes.c_uint32),
+            ('eventKind', ctypes.c_uint32),
+        ]
+
+    class EventHotKeyID(ctypes.Structure):
+        _fields_ = [
+            ('signature', ctypes.c_uint32),
+            ('id', ctypes.c_uint32),
+        ]
+
+    def __init__(self, hotkeys: Set[str], callback: Callable[[str], None]):
+        self.hotkeys = set(hotkeys)
+        self.callback = callback
+        self._thread: Optional[threading.Thread] = None
+        self._ready = threading.Event()
+        self._started = False
+        self._running = False
+        self._carbon = None
+        self._handler_ref = ctypes.c_void_p()
+        self._handler_proc = None
+        self._hotkey_refs: List[ctypes.c_void_p] = []
+        self._id_to_hotkey: Dict[int, str] = {}
+
+    def start(self) -> bool:
+        if self._thread and self._thread.is_alive():
+            return True
+
+        self._ready.clear()
+        self._started = False
+        self._thread = threading.Thread(
+            target=self._run_event_loop,
+            daemon=True,
+            name='MacOSNativeHotkeyRegistrar'
+        )
+        self._thread.start()
+        self._ready.wait(timeout=3.0)
+        return self._started
+
+    def stop(self) -> None:
+        self._running = False
+        if self._carbon:
+            try:
+                for ref in self._hotkey_refs:
+                    if ref:
+                        self._carbon.UnregisterEventHotKey(ref)
+                self._hotkey_refs.clear()
+                self._carbon.QuitApplicationEventLoop()
+            except Exception as e:
+                logger.debug(f"停止macOS原生热键注册器时出错: {e}")
+
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
+        self._thread = None
+        self._started = False
+
+    def update_hotkeys(self, hotkeys: Set[str]) -> bool:
+        was_running = self._thread is not None and self._thread.is_alive()
+        if was_running:
+            self.stop()
+        self.hotkeys = set(hotkeys)
+        if was_running:
+            return self.start()
+        return True
+
+    def _run_event_loop(self) -> None:
+        try:
+            library_path = ctypes.util.find_library('Carbon') or '/System/Library/Frameworks/Carbon.framework/Carbon'
+            self._carbon = ctypes.CDLL(library_path)
+            self._configure_carbon_api()
+            self._install_handler()
+            self._register_hotkeys()
+
+            if not self._hotkey_refs:
+                logger.warning("没有成功注册任何macOS原生热键")
+                self._started = False
+                self._ready.set()
+                return
+
+            self._running = True
+            self._started = True
+            self._ready.set()
+            logger.info(f"macOS原生热键注册成功: {len(self._hotkey_refs)} 个快捷键")
+            self._carbon.RunApplicationEventLoop()
+
+        except Exception as e:
+            logger.warning(f"macOS原生热键注册失败，将回退到pynput: {e}")
+            self._started = False
+            self._ready.set()
+        finally:
+            self._running = False
+            self._started = False
+
+    def _configure_carbon_api(self) -> None:
+        handler_type = ctypes.CFUNCTYPE(
+            ctypes.c_int32,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p
+        )
+        self._handler_type = handler_type
+
+        self._carbon.GetApplicationEventTarget.restype = ctypes.c_void_p
+        self._carbon.InstallApplicationEventHandler.argtypes = [
+            handler_type,
+            ctypes.c_uint32,
+            ctypes.POINTER(self.EventTypeSpec),
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+        self._carbon.InstallApplicationEventHandler.restype = ctypes.c_int32
+        self._carbon.RegisterEventHotKey.argtypes = [
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            self.EventHotKeyID,
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+        self._carbon.RegisterEventHotKey.restype = ctypes.c_int32
+        self._carbon.UnregisterEventHotKey.argtypes = [ctypes.c_void_p]
+        self._carbon.UnregisterEventHotKey.restype = ctypes.c_int32
+        self._carbon.GetEventParameter.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint32),
+            ctypes.c_void_p,
+        ]
+        self._carbon.GetEventParameter.restype = ctypes.c_int32
+        self._carbon.RunApplicationEventLoop.restype = None
+        self._carbon.QuitApplicationEventLoop.restype = None
+
+    def _install_handler(self) -> None:
+        def handler(next_handler, event, user_data):
+            hotkey_id = self.EventHotKeyID()
+            actual_size = ctypes.c_uint32()
+            status = self._carbon.GetEventParameter(
+                event,
+                self.EVENT_PARAM_DIRECT_OBJECT,
+                self.TYPE_EVENT_HOTKEY_ID,
+                None,
+                ctypes.sizeof(hotkey_id),
+                ctypes.byref(actual_size),
+                ctypes.byref(hotkey_id),
+            )
+            if status == 0:
+                hotkey = self._id_to_hotkey.get(hotkey_id.id)
+                if hotkey:
+                    self.callback(hotkey)
+            return 0
+
+        self._handler_proc = self._handler_type(handler)
+        event_spec = self.EventTypeSpec(
+            self.EVENT_CLASS_KEYBOARD,
+            self.EVENT_HOTKEY_PRESSED,
+        )
+        status = self._carbon.InstallApplicationEventHandler(
+            self._handler_proc,
+            1,
+            ctypes.byref(event_spec),
+            None,
+            ctypes.byref(self._handler_ref),
+        )
+        if status != 0:
+            raise RuntimeError(f"InstallApplicationEventHandler failed: {status}")
+
+    def _register_hotkeys(self) -> None:
+        target = self._carbon.GetApplicationEventTarget()
+        hotkey_id = 1
+
+        for hotkey in sorted(self.hotkeys):
+            parsed = self._parse_hotkey(hotkey)
+            if not parsed:
+                logger.debug(f"跳过不支持的macOS原生热键: {hotkey}")
+                continue
+
+            key_code, modifiers = parsed
+            event_hotkey_id = self.EventHotKeyID(self.SIGNATURE, hotkey_id)
+            hotkey_ref = ctypes.c_void_p()
+            status = self._carbon.RegisterEventHotKey(
+                key_code,
+                modifiers,
+                event_hotkey_id,
+                target,
+                0,
+                ctypes.byref(hotkey_ref),
+            )
+            if status == 0:
+                self._hotkey_refs.append(hotkey_ref)
+                self._id_to_hotkey[hotkey_id] = hotkey
+                hotkey_id += 1
+            else:
+                logger.warning(f"注册macOS原生热键失败: {hotkey}, status={status}")
+
+    def _parse_hotkey(self, hotkey: str) -> Optional[Tuple[int, int]]:
+        parts = [self.KEY_ALIASES.get(part, part) for part in hotkey.lower().replace(' ', '').split('+') if part]
+        modifiers = 0
+        key_name = None
+
+        for part in parts:
+            if part in self.MODIFIER_CODES:
+                modifiers |= self.MODIFIER_CODES[part]
+            else:
+                key_name = part
+
+        if not key_name or key_name not in self.KEY_CODES or modifiers == 0:
+            return None
+
+        return self.KEY_CODES[key_name], modifiers
 
 
 class HotkeyListener:
@@ -110,8 +377,9 @@ class HotkeyListener:
         self.config_manager = HotkeyConfigManager(config_dir)
         self.template_parser = BasicTemplateParser(template_dir)
         self.template_dir = Path(template_dir)
-        self.listener: Optional[Listener] = None
+        self.listener: Optional[Any] = None
         self.is_listening = False
+        self._listener_backend = None
         self._pressed_keys = set()
         self._hotkey_handlers: Dict[str, Callable] = {}
         self._configured_hotkeys: Set[str] = set()
@@ -200,6 +468,8 @@ class HotkeyListener:
         try:
             mappings = self.config_manager.get_all_mappings()
             self._configured_hotkeys = set(mappings.keys())
+            if isinstance(self.listener, MacOSNativeHotkeyRegistrar):
+                self.listener.update_hotkeys(self._configured_hotkeys)
             logger.info(f"加载快捷键映射: {len(mappings)} 个快捷键")
             
             # 执行全面的配置验证
@@ -1664,7 +1934,8 @@ class HotkeyListener:
             'max_restart_attempts': self._max_restart_attempts,
             'statistics': self._listening_statistics.copy(),
             'state_file_exists': self._state_file.exists(),
-            'graceful_shutdown': self._graceful_shutdown
+            'graceful_shutdown': self._graceful_shutdown,
+            'listener_backend': self._listener_backend
         }
     
     def set_auto_restart(self, enabled: bool) -> None:
@@ -2100,24 +2371,10 @@ class HotkeyListener:
                self._macos_compatibility['accessibility_granted'] is not None):
                 return self._macos_compatibility['accessibility_granted']
             
-            # 尝试创建一个简单的监听器来测试权限
-            try:
-                test_listener = Listener(on_press=lambda key: None, on_release=lambda key: None)
-                test_listener.start()
-                test_listener.stop()
-                
-                self._macos_compatibility['accessibility_granted'] = True
-                logger.info("✅ 辅助功能权限已授予")
-                
-            except Exception as e:
-                self._macos_compatibility['accessibility_granted'] = False
-                error_msg = str(e)
-                
-                if "Accessibility" in error_msg or "permission" in error_msg.lower():
-                    logger.warning("❌ 辅助功能权限未授予")
-                    self._show_accessibility_permission_guide()
-                else:
-                    logger.error(f"权限检查异常: {e}")
+            # 不再通过临时全局键盘监听器测试权限，避免为了检查权限而触发
+            # Input Monitoring 警告。原生热键注册和后续文本输入会在实际启动时报告失败。
+            self._macos_compatibility['accessibility_granted'] = True
+            logger.info("✅ macOS权限检查采用延迟验证")
             
             self._macos_compatibility['last_permission_check'] = current_time
             return self._macos_compatibility['accessibility_granted']
@@ -2450,26 +2707,13 @@ class HotkeyListener:
             )
             
         try:
-            self.listener = Listener(
-                on_press=self._on_press,
-                on_release=self._on_release,
-                suppress=False  # 不抑制其他程序接收按键事件
-            )
-            
-            self.listener.start()
-            self.is_listening = True
-            
-            # 更新统计信息
-            self._listening_statistics['start_time'] = datetime.datetime.now().isoformat()
-            self._listening_statistics['total_hotkeys_processed'] = 0
-            
-            # 启动健康检查
-            self._start_health_check()
-            
-            # 保存状态
-            self._save_listening_state()
-            
-            logger.info(f"全局快捷键监听器启动成功 (平台: {self._platform})")
+            if (self._platform == "Darwin" and self._should_use_native_hotkeys()
+                    and self._start_native_hotkey_listener()):
+                logger.info("全局快捷键监听器启动成功 (平台: Darwin, 后端: native)")
+                return True
+
+            self._start_pynput_listener()
+            logger.info(f"全局快捷键监听器启动成功 (平台: {self._platform}, 后端: pynput)")
             return True
             
         except Exception as e:
@@ -2491,6 +2735,41 @@ class HotkeyListener:
             self._listening_statistics['last_error'] = str(e)
             return False
     
+    def _mark_listener_started(self, backend: str) -> None:
+        self.is_listening = True
+        self._listener_backend = backend
+        self._listening_statistics['start_time'] = datetime.datetime.now().isoformat()
+        self._listening_statistics['total_hotkeys_processed'] = 0
+        self._start_health_check()
+        self._save_listening_state()
+
+    def _should_use_native_hotkeys(self) -> bool:
+        """是否启用实验性的macOS原生热键后端。"""
+        env_value = os.environ.get('PROMPT_GO_NATIVE_HOTKEYS')
+        if env_value is not None:
+            return env_value.lower() in {'1', 'true', 'yes', 'on'}
+
+        return bool(self.config_manager.get('settings.native_hotkeys', False))
+
+    def _start_native_hotkey_listener(self) -> bool:
+        registrar = MacOSNativeHotkeyRegistrar(self._configured_hotkeys, self._handle_hotkey)
+        if not registrar.start():
+            logger.warning("macOS原生热键后端不可用，回退到pynput监听器")
+            return False
+
+        self.listener = registrar
+        self._mark_listener_started('native')
+        return True
+
+    def _start_pynput_listener(self) -> None:
+        self.listener = Listener(
+            on_press=self._on_press,
+            on_release=self._on_release,
+            suppress=False
+        )
+        self.listener.start()
+        self._mark_listener_started('pynput')
+
     def stop_listening(self) -> bool:
         """停止监听全局快捷键（增强版 - 包含macOS通知）"""
         if not self.is_listening:
@@ -2508,6 +2787,7 @@ class HotkeyListener:
                 self.listener = None
                 
             self.is_listening = False
+            self._listener_backend = None
             self._pressed_keys.clear()
             
             # 更新统计信息

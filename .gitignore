@@ -71,3 +71,5 @@ Thumbs.db
 local/
 .local/
 scratch/
+# Local helper symlinks
+bin/
