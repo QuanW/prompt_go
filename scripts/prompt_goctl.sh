@@ -302,6 +302,17 @@ agent_status() {
   fi
 }
 
+other_prompt_go_processes() {
+  if ! command -v ps >/dev/null 2>&1; then
+    return 0
+  fi
+
+  ps -axo pid=,command= 2>/dev/null \
+    | awk -v project="$PROJECT_DIR" '
+      /[p]rompt_go/ && /main\.py|mail\.py/ && index($0, project) == 0 { print }
+    '
+}
+
 doctor() {
   echo "Prompt GO diagnostics"
   echo "Project: $PROJECT_DIR"
@@ -327,6 +338,15 @@ doctor() {
     if [[ "$RESOLVED_PYTHON" != "$PYTHON_BIN" ]]; then
       echo "$RESOLVED_PYTHON"
     fi
+    echo
+  fi
+
+  DUPLICATE_PROCESSES="$(other_prompt_go_processes || true)"
+  if [[ -n "$DUPLICATE_PROCESSES" ]]; then
+    echo "Other Prompt GO-like processes are running outside this project:"
+    printf '%s
+' "$DUPLICATE_PROCESSES"
+    echo "They can steal hotkeys or confuse debugging. Stop them before testing native hotkeys."
     echo
   fi
 

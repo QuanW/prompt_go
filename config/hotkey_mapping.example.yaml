@@ -10,6 +10,9 @@ hotkeys:
 settings:
   # 启用快捷键监听
   enabled: true
+
+  # macOS原生热键helper后端。默认关闭；设为 true 可避免pynput监听全部键盘事件。
+  native_hotkeys: false
   
   # 响应延迟设置（毫秒）
   response_delay: 100
