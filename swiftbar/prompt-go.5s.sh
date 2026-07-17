@@ -18,10 +18,8 @@ PERMISSION_WARNING=""
 
 if [[ -f "$LOG_FILE" ]]; then
   RECENT_LOG="$(tail -n 200 "$LOG_FILE" 2>/dev/null || true)"
-  LAST_BACKEND="$(printf '%s
-' "$RECENT_LOG" | awk '/全局快捷键监听器启动成功/ { line=$0 } END { print line }')"
-  TRUST_WARNING_ACTIVE="$(printf '%s
-' "$RECENT_LOG" | awk '
+  LAST_BACKEND="$(printf '%s\n' "$RECENT_LOG" | awk '/全局快捷键监听器启动成功/ { line=$0 } END { print line }')"
+  TRUST_WARNING_ACTIVE="$(printf '%s\n' "$RECENT_LOG" | awk '
     /not trusted/ { warning = 1 }
     /触发快捷键:/ { warning = 0 }
     END { if (warning) print "yes" }
@@ -35,15 +33,20 @@ case "$STATUS" in
   running*)
     PID="${STATUS#running }"
     if [[ "$PERMISSION_WARNING" == "yes" ]]; then
-      echo "Prompt GO: permissions"
+      echo "● Prompt GO | color=#FF9F0A size=10"
+      STATUS_LABEL="permissions"
+      STATUS_COLOR="orange"
     else
-      echo "Prompt GO: running"
+      echo "● Prompt GO | color=#30D158 size=10"
+      STATUS_LABEL="running"
+      STATUS_COLOR="green"
     fi
     echo "---"
+    echo "Status: $STATUS_LABEL | color=$STATUS_COLOR"
     echo "PID: $PID"
     echo "Agent: $AGENT_STATUS"
     if [[ "$PERMISSION_WARNING" == "yes" ]]; then
-      echo "Keyboard permission may be missing"
+      echo "Keyboard permission may be missing | color=orange"
       echo "Run Doctor | bash=\"$CTL\" param1=doctor terminal=true refresh=false"
       echo "---"
     fi
@@ -53,26 +56,28 @@ case "$STATUS" in
     ;;
   stale*)
     PID="${STATUS#stale }"
-    echo "Prompt GO: stale"
+    echo "● Prompt GO | color=#FF9F0A size=10"
     echo "---"
+    echo "Status: stale PID | color=orange"
     echo "Stale PID: $PID"
     echo "Agent: $AGENT_STATUS"
     echo "Start | bash=\"$CTL\" param1=start terminal=false refresh=true"
     echo "Restart | bash=\"$CTL\" param1=restart terminal=false refresh=true"
     ;;
   stopped)
-    echo "Prompt GO: stopped"
+    echo "● Prompt GO | color=#FF453A size=10"
     echo "---"
+    echo "Status: stopped | color=red"
     echo "Agent: $AGENT_STATUS"
     echo "Start | bash=\"$CTL\" param1=start terminal=false refresh=true"
     ;;
   *)
-    echo "Prompt GO: error"
+    echo "● Prompt GO | color=#FF453A size=10"
     echo "---"
+    echo "Status: error | color=red"
     echo "Status command failed"
     ;;
 esac
-
 echo "---"
 case "$AGENT_STATUS" in
   not-installed)
