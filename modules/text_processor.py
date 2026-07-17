@@ -14,7 +14,6 @@ import sys
 from typing import Optional, Dict, Any, Callable, List, Union
 from pathlib import Path
 import pyperclip
-from pynput import keyboard
 from pynput.keyboard import Key, KeyCode
 
 from .template_parser import AdvancedTemplateParser, TemplateContent, TemplateParsingError

@@ -340,7 +340,6 @@ last_error = data.get('last_error') or {}
 
 print(f"Runtime status file: {path}")
 print(f"Runtime state: {data.get('state', 'unknown')}")
-print(f"Hotkey: {data.get('hotkey_backend') or data.get('backend') or 'unknown'}")
 print(f"API configured: {', '.join(configured) if configured else 'none'}")
 print(f"Current model: {model.get('name') or 'unknown'}")
 if trigger:

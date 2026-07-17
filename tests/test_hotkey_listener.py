@@ -14,7 +14,6 @@ import tempfile
 import shutil
 
 from modules.hotkey_listener import HotkeyListener
-from pynput.keyboard import Key, KeyCode
 
 
 class TestHotkeyListener:
@@ -69,36 +68,7 @@ settings:
         assert listener.config_manager is not None
         assert not listener.is_listening
         assert listener.listener is None
-        assert len(listener._pressed_keys) == 0
         assert len(listener._hotkey_handlers) == 0
-        
-    def test_normalize_hotkey_valid_combinations(self, sample_hotkey_config):
-        """测试有效快捷键组合的标准化"""
-        listener = HotkeyListener(sample_hotkey_config)
-        
-        # 测试 ctrl+alt+cmd+1
-        keys = {Key.ctrl_l, Key.alt_l, Key.cmd, KeyCode.from_char('1')}
-        result = listener._normalize_hotkey(keys)
-        assert result == "ctrl+alt+cmd+1"
-        
-        # 测试 ctrl+alt+cmd+9 (使用右侧修饰键)
-        keys = {Key.ctrl_r, Key.alt_r, Key.cmd_r, KeyCode.from_char('9')}
-        result = listener._normalize_hotkey(keys)
-        assert result == "ctrl+alt+cmd+9"
-        
-    def test_normalize_hotkey_invalid_combinations(self, sample_hotkey_config):
-        """测试无效快捷键组合"""
-        listener = HotkeyListener(sample_hotkey_config)
-        
-        # 缺少修饰键
-        keys = {KeyCode.from_char('1')}
-        result = listener._normalize_hotkey(keys)
-        assert result is None
-        
-        # 缺少主键
-        keys = {Key.ctrl_l, Key.alt_l}
-        result = listener._normalize_hotkey(keys)
-        assert result is None
         
     def test_register_hotkey_handler(self, sample_hotkey_config):
         """测试快捷键处理函数注册"""
@@ -243,9 +213,20 @@ settings:
         
         assert result == True
         assert listener.is_listening == True
-        assert listener._listener_backend == 'native'
         mock_helper.start.assert_called_once()
         
+    @patch('modules.hotkey_listener.HotkeyListener._restore_listening_state')
+    def test_start_listening_rejects_non_macos(self, mock_restore_state, sample_hotkey_config):
+        """测试非 macOS 平台不再启动旧监听方案"""
+        listener = HotkeyListener(sample_hotkey_config)
+        listener._platform = "Linux"
+
+        result = listener.start_listening()
+
+        assert result == False
+        assert listener.is_listening == False
+        assert listener._listening_statistics['last_error'] == "unsupported platform: Linux"
+
     @patch('modules.hotkey_listener.MacOSNativeHotkeyHelperBackend')
     @patch('modules.hotkey_listener.HotkeyListener._restore_listening_state')
     def test_stop_listening(self, mock_restore_state, mock_helper_class, sample_hotkey_config):
@@ -914,14 +895,9 @@ settings:
         listener._macos_compatibility['accessibility_granted'] = None
         listener._macos_compatibility['last_permission_check'] = None
         
-        # 测试权限已授予的情况
-        with patch('pynput.keyboard.Listener') as mock_listener_class:
-            mock_listener = Mock()
-            mock_listener_class.return_value = mock_listener
-            
-            result = listener._check_accessibility_permission()
-            assert result == True
-            assert listener._macos_compatibility['accessibility_granted'] == True
+        result = listener._check_accessibility_permission()
+        assert result == True
+        assert listener._macos_compatibility['accessibility_granted'] == True
     
     def test_macos_notification_sending(self, sample_hotkey_config):
         """测试macOS系统通知发送"""
@@ -1103,7 +1079,6 @@ settings:
                     
                     result = listener.start_listening()
                     assert result == True
-                    assert listener._listener_backend == 'native'
                     mock_notification.assert_called_with(
                         "快捷键监听器",
                         "快捷键监听已启动"

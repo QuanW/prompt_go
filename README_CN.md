@@ -198,7 +198,7 @@ max_tokens: 2000
 ## 🙏 致谢
 
 感谢以下开源项目：
-- [pynput](https://github.com/moses-palmer/pynput) - 跨平台键盘监听
+- [pynput](https://github.com/moses-palmer/pynput) - 文本输入按键自动化
 - [pyperclip](https://github.com/asweigart/pyperclip) - 剪贴板操作
 - [PyYAML](https://github.com/yaml/pyyaml) - YAML解析
 - [pytest](https://github.com/pytest-dev/pytest) - 测试框架

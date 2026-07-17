@@ -428,11 +428,9 @@ class PromptManager:
             
             self.running = True
             self.start_time = time.time()
-            backend = getattr(self.hotkey_listener, '_listener_backend', None)
             self.runtime_status.update(
                 state="running",
                 pid=os.getpid(),
-                backend=backend,
                 counters={
                     "processed_requests": self.processed_requests,
                     "error_count": self.error_count,

@@ -17,7 +17,6 @@ STATUS="$("$CTL" status 2>/dev/null || echo "error")"
 AGENT_STATUS="$("$CTL" agent-status 2>/dev/null || echo "unknown")"
 PERMISSION_WARNING=""
 
-BACKEND="unknown"
 MODEL="unknown"
 API_CONFIGURED="unknown"
 LAST_TRIGGER="none"
@@ -36,7 +35,6 @@ configured = [name for name, cfg in providers.items() if cfg.get('configured')]
 model = (data.get('model') or {}).get('name') or 'unknown'
 trigger = data.get('last_trigger') or {}
 error = data.get('last_error') or {}
-print(f"BACKEND={data.get('hotkey_backend') or data.get('backend') or 'unknown'}")
 print(f"MODEL={model}")
 print(f"API_CONFIGURED={','.join(configured) if configured else 'none'}")
 if trigger:
@@ -47,7 +45,6 @@ PY
 )"
   while IFS='=' read -r key value; do
     case "$key" in
-      BACKEND) BACKEND="$value" ;;
       MODEL) MODEL="$value" ;;
       API_CONFIGURED) API_CONFIGURED="$value" ;;
       LAST_TRIGGER) LAST_TRIGGER="$value" ;;
@@ -83,7 +80,6 @@ case "$STATUS" in
     echo "---"
     echo "Status: $STATUS_LABEL | color=$STATUS_COLOR"
     echo "PID: $PID"
-    echo "Hotkey: $BACKEND"
     echo "Model: $MODEL"
     echo "API: $API_CONFIGURED"
     echo "Last: $LAST_TRIGGER"

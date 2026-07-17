@@ -186,7 +186,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 Thanks to the following open source projects:
-- [pynput](https://github.com/moses-palmer/pynput) - Cross-platform keyboard monitoring
+- [pynput](https://github.com/moses-palmer/pynput) - Keyboard automation for text input
 - [pyperclip](https://github.com/asweigart/pyperclip) - Clipboard operations
 - [PyYAML](https://github.com/yaml/pyyaml) - YAML parsing
 - [pytest](https://github.com/pytest-dev/pytest) - Testing framework

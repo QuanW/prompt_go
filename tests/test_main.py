@@ -282,7 +282,11 @@ class TestPromptManager:
 
     def test_instance_lock_conflict(self, prompt_manager, tmp_path):
         """测试实例锁冲突"""
-        first = PromptManager(config_dir=str(tmp_path / "config1"), prompt_dir=str(tmp_path / "prompt1"))
+        first = PromptManager(
+            config_dir=str(tmp_path / "config1"),
+            prompt_dir=str(tmp_path / "prompt1"),
+            runtime_status_path=str(tmp_path / "runtime" / "first-status.json"),
+        )
         lock_path = tmp_path / "prompt_go.lock"
 
         assert first.acquire_instance_lock(str(lock_path)) == True
@@ -397,11 +401,15 @@ class TestIntegration:
         shutil.rmtree(config_dir)
         shutil.rmtree(prompt_dir)
     
-    def test_full_initialization_flow(self, temp_dirs):
+    def test_full_initialization_flow(self, temp_dirs, tmp_path):
         """测试完整的初始化流程"""
         config_dir, prompt_dir = temp_dirs
         
-        prompt_manager = PromptManager(config_dir=config_dir, prompt_dir=prompt_dir)
+        prompt_manager = PromptManager(
+            config_dir=config_dir,
+            prompt_dir=prompt_dir,
+            runtime_status_path=str(tmp_path / "runtime" / "initialization-status.json"),
+        )
         
         # 这个测试验证初始化不会抛出异常
         try:
@@ -413,12 +421,16 @@ class TestIntegration:
             print(f"初始化在测试环境中遇到预期的限制: {e}")
             # 在测试环境中失败是预期的
     
-    def test_logging_setup(self, temp_dirs):
+    def test_logging_setup(self, temp_dirs, tmp_path):
         """测试日志设置"""
         config_dir, prompt_dir = temp_dirs
         
         # 创建PromptManager会设置日志
-        prompt_manager = PromptManager(config_dir=config_dir, prompt_dir=prompt_dir)
+        prompt_manager = PromptManager(
+            config_dir=config_dir,
+            prompt_dir=prompt_dir,
+            runtime_status_path=str(tmp_path / "runtime" / "logging-status.json"),
+        )
         
         # 验证日志配置基本功能
         logger = logging.getLogger()

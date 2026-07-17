@@ -50,8 +50,6 @@ class RuntimeStatus:
             "updated_at": _now(),
             "pid": os.getpid(),
             "project_dir": str(Path.cwd()),
-            "backend": None,
-            "hotkey_backend": None,
             "api": {"providers": {}},
             "model": {"provider": None, "name": None},
             "counters": {"processed_requests": 0, "error_count": 0},
@@ -96,9 +94,6 @@ class RuntimeStatus:
                 "name": providers[preferred_provider].get("model"),
             }
         self.update()
-
-    def set_backend(self, backend: Optional[str]) -> None:
-        self.update(backend=backend, hotkey_backend=backend)
 
     def set_trigger_started(self, template_name: str) -> None:
         self.update(
