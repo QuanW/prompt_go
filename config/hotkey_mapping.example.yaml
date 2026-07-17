@@ -11,8 +11,9 @@ settings:
   # 启用快捷键监听
   enabled: true
 
-  # macOS原生热键helper后端。默认关闭；设为 true 可避免pynput监听全部键盘事件。
-  native_hotkeys: false
+  # macOS 始终使用原生热键 helper，不再通过 pynput 监听全局键盘事件。
+  # native_hotkeys 为历史兼容字段，保留或删除都不会影响 macOS。
+  native_hotkeys: true
   
   # 响应延迟设置（毫秒）
   response_delay: 100

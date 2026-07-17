@@ -340,7 +340,7 @@ last_error = data.get('last_error') or {}
 
 print(f"Runtime status file: {path}")
 print(f"Runtime state: {data.get('state', 'unknown')}")
-print(f"Backend: {data.get('backend') or 'unknown'}")
+print(f"Hotkey: {data.get('hotkey_backend') or data.get('backend') or 'unknown'}")
 print(f"API configured: {', '.join(configured) if configured else 'none'}")
 print(f"Current model: {model.get('name') or 'unknown'}")
 if trigger:
@@ -395,19 +395,17 @@ doctor() {
 
   if [[ -f "$LOG_FILE" ]]; then
     RECENT_LOG="$(tail -n 200 "$LOG_FILE" 2>/dev/null || true)"
-    LAST_BACKEND="$(printf '%s
-' "$RECENT_LOG" | awk '/全局快捷键监听器启动成功/ { line=$0 } END { print line }')"
     TRUST_WARNING_ACTIVE="$(printf '%s
 ' "$RECENT_LOG" | awk '
-      /not trusted/ { warning = 1 }
-      /触发快捷键:/ { warning = 0 }
+      /not trusted|辅助功能权限未授予|权限未授予/ { warning = 1 }
+      /全局快捷键监听器启动成功|触发快捷键:/ { warning = 0 }
       END { if (warning) print "yes" }
     ')"
-    if [[ "$LAST_BACKEND" == *"后端: pynput"* ]] && [[ "$TRUST_WARNING_ACTIVE" == "yes" ]]; then
-      echo "Recent log warning: input monitoring is not trusted."
+    if [[ "$TRUST_WARNING_ACTIVE" == "yes" ]]; then
+      echo "Recent log warning: hotkey permission may not be trusted."
       echo "Open System Settings -> Privacy & Security and update permissions, then fully quit and reopen the launcher app."
     else
-      echo "No active pynput input-monitoring trust warning found in the recent log."
+      echo "No active hotkey permission warning found in the recent log."
     fi
   else
     echo "Log file not found yet."

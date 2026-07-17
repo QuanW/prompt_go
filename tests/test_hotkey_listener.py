@@ -91,17 +91,12 @@ settings:
         listener = HotkeyListener(sample_hotkey_config)
         
         # 缺少修饰键
-        keys = {Key.ctrl_l, KeyCode.from_char('1')}
+        keys = {KeyCode.from_char('1')}
         result = listener._normalize_hotkey(keys)
         assert result is None
         
-        # 无效数字键
-        keys = {Key.ctrl_l, Key.alt_l, Key.cmd, KeyCode.from_char('0')}
-        result = listener._normalize_hotkey(keys)
-        assert result is None
-        
-        # 非数字键
-        keys = {Key.ctrl_l, Key.alt_l, Key.cmd, KeyCode.from_char('a')}
+        # 缺少主键
+        keys = {Key.ctrl_l, Key.alt_l}
         result = listener._normalize_hotkey(keys)
         assert result is None
         
@@ -232,47 +227,59 @@ settings:
         assert info['handlers_count'] == 4
         assert info['response_delay'] == 100
         
-    @patch('modules.hotkey_listener.Listener')
+    @patch('modules.hotkey_listener.MacOSNativeHotkeyHelperBackend')
     @patch('modules.hotkey_listener.HotkeyListener._restore_listening_state')
-    def test_start_listening(self, mock_restore_state, mock_listener_class, sample_hotkey_config):
-        """测试启动快捷键监听"""
-        mock_listener = Mock()
-        mock_listener_class.return_value = mock_listener
+    def test_start_listening(self, mock_restore_state, mock_helper_class, sample_hotkey_config):
+        """测试 macOS 使用原生 helper 启动快捷键监听"""
+        mock_helper = Mock()
+        mock_helper.start.return_value = True
+        mock_helper_class.return_value = mock_helper
         
         listener = HotkeyListener(sample_hotkey_config)
-        result = listener.start_listening()
+        listener._platform = "Darwin"
+        with patch.object(listener, '_check_accessibility_permission', return_value=True), \
+             patch.object(listener, '_send_macos_notification'):
+            result = listener.start_listening()
         
         assert result == True
         assert listener.is_listening == True
-        mock_listener.start.assert_called()
+        assert listener._listener_backend == 'native'
+        mock_helper.start.assert_called_once()
         
-    @patch('modules.hotkey_listener.Listener')
+    @patch('modules.hotkey_listener.MacOSNativeHotkeyHelperBackend')
     @patch('modules.hotkey_listener.HotkeyListener._restore_listening_state')
-    def test_stop_listening(self, mock_restore_state, mock_listener_class, sample_hotkey_config):
-        """测试停止快捷键监听"""
-        mock_listener = Mock()
-        mock_listener_class.return_value = mock_listener
+    def test_stop_listening(self, mock_restore_state, mock_helper_class, sample_hotkey_config):
+        """测试停止 macOS 原生 helper 监听"""
+        mock_helper = Mock()
+        mock_helper.start.return_value = True
+        mock_helper_class.return_value = mock_helper
         
         listener = HotkeyListener(sample_hotkey_config)
-        listener.start_listening()
+        listener._platform = "Darwin"
+        with patch.object(listener, '_check_accessibility_permission', return_value=True), \
+             patch.object(listener, '_send_macos_notification'):
+            listener.start_listening()
         result = listener.stop_listening()
         
         assert result == True
         assert listener.is_listening == False
-        mock_listener.stop.assert_called()
+        mock_helper.stop.assert_called_once()
         
     def test_context_manager(self, sample_hotkey_config):
         """测试上下文管理器"""
-        with patch('modules.hotkey_listener.Listener') as mock_listener_class:
-            with patch('modules.hotkey_listener.HotkeyListener._restore_listening_state'):
-                mock_listener = Mock()
-                mock_listener_class.return_value = mock_listener
+        with patch('modules.hotkey_listener.MacOSNativeHotkeyHelperBackend') as mock_helper_class:
+            with patch('modules.hotkey_listener.HotkeyListener._restore_listening_state'), \
+                 patch('modules.hotkey_listener.HotkeyListener._check_accessibility_permission', return_value=True), \
+                 patch('modules.hotkey_listener.HotkeyListener._send_macos_notification'):
+                mock_helper = Mock()
+                mock_helper.start.return_value = True
+                mock_helper_class.return_value = mock_helper
                 
                 with HotkeyListener(sample_hotkey_config) as listener:
                     assert listener.is_listening == True
-                    mock_listener.start.assert_called()
+                    mock_helper.start.assert_called()
                     
-                mock_listener.stop.assert_called()
+                mock_helper.stop.assert_called()
 
     def test_detect_basic_conflicts(self, conflicted_hotkey_config):
         """测试基础快捷键冲突检测"""
@@ -296,8 +303,8 @@ settings:
         assert 'invalid_format' in conflicts
         assert 'duplicate_mappings' in conflicts
         
-        # 应该检测到无效格式（cmd+space不符合我们的快捷键格式要求）
-        assert 'cmd+space' in conflicts['invalid_format']
+        # cmd+space 格式有效，但属于系统保留快捷键
+        assert 'cmd+space' in conflicts['system_reserved']
         
         # 应该检测到其他无效格式
         assert 'invalid_hotkey' in conflicts['invalid_format']
@@ -312,13 +319,13 @@ settings:
         
         # 有效格式
         assert listener._is_valid_hotkey_format("ctrl+alt+cmd+1")
-        assert listener._is_valid_hotkey_format("ctrl+alt+cmd+9")
+        assert listener._is_valid_hotkey_format("ctrl+shift+1")
+        assert listener._is_valid_hotkey_format("cmd+a")
         
         # 无效格式
         assert not listener._is_valid_hotkey_format("invalid_key")
-        assert not listener._is_valid_hotkey_format("ctrl+alt+1")  # 缺少cmd
-        assert not listener._is_valid_hotkey_format("ctrl+alt+cmd+0")  # 无效数字
-        assert not listener._is_valid_hotkey_format("ctrl+alt+cmd+a")  # 非数字
+        assert not listener._is_valid_hotkey_format("ctrl+alt")  # 缺少主键
+        assert not listener._is_valid_hotkey_format("1")  # 缺少修饰键
         
     def test_fix_hotkey_format(self, sample_hotkey_config):
         """测试快捷键格式修复"""
@@ -372,7 +379,8 @@ settings:
         
         # 应该返回未使用的快捷键
         assert isinstance(available, list)
-        assert len(available) == 5  # 9个总数 - 4个已使用
+        assert "ctrl+alt+cmd+4" in available
+        assert "ctrl+1" in available
         
         # 检查是否不包含已使用的快捷键
         used_hotkeys = set(listener.config_manager.get_all_mappings().keys())
@@ -516,17 +524,21 @@ settings:
         assert not listener._is_listener_healthy()
         
         # 模拟启动状态
-        with patch('modules.hotkey_listener.Listener') as mock_listener_class:
-            mock_listener = Mock()
-            mock_listener._thread = Mock()
-            mock_listener._thread.is_alive.return_value = True
-            mock_listener_class.return_value = mock_listener
+        with patch('modules.hotkey_listener.MacOSNativeHotkeyHelperBackend') as mock_helper_class:
+            mock_helper = Mock()
+            mock_helper.start.return_value = True
+            mock_helper._thread = Mock()
+            mock_helper._thread.is_alive.return_value = True
+            mock_helper_class.return_value = mock_helper
+            listener._platform = "Darwin"
             
-            listener.start_listening()
+            with patch.object(listener, '_check_accessibility_permission', return_value=True), \
+                 patch.object(listener, '_send_macos_notification'):
+                listener.start_listening()
             assert listener._is_listener_healthy()
             
             # 模拟线程死亡
-            mock_listener._thread.is_alive.return_value = False
+            mock_helper._thread.is_alive.return_value = False
             assert not listener._is_listener_healthy()
             
             listener.stop_listening()
@@ -1081,19 +1093,36 @@ settings:
                 assert result == False
                 mock_guide.assert_called_once()
         
-        # 测试权限已授予的情况
+        # 测试权限已授予且 native helper 启动成功的情况
         with patch.object(listener, '_check_accessibility_permission', return_value=True):
             with patch.object(listener, '_send_macos_notification') as mock_notification:
-                with patch('pynput.keyboard.Listener') as mock_listener_class:
-                    mock_listener = Mock()
-                    mock_listener_class.return_value = mock_listener
+                with patch('modules.hotkey_listener.MacOSNativeHotkeyHelperBackend') as mock_helper_class:
+                    mock_helper = Mock()
+                    mock_helper.start.return_value = True
+                    mock_helper_class.return_value = mock_helper
                     
                     result = listener.start_listening()
-                    # 由于已经在监听，这里会返回False
+                    assert result == True
+                    assert listener._listener_backend == 'native'
                     mock_notification.assert_called_with(
                         "快捷键监听器",
                         "快捷键监听已启动"
                     )
+
+        listener.stop_listening()
+
+        # 测试 native helper 启动失败时不回退到 pynput
+        with patch.object(listener, '_check_accessibility_permission', return_value=True):
+            with patch.object(listener, '_send_macos_notification'):
+                with patch('modules.hotkey_listener.MacOSNativeHotkeyHelperBackend') as mock_helper_class:
+                    mock_helper = Mock()
+                    mock_helper.start.return_value = False
+                    mock_helper_class.return_value = mock_helper
+
+                    result = listener.start_listening()
+                    assert result == False
+                    assert listener.is_listening == False
+                    assert 'helper' in listener._listening_statistics['last_error']
     
     def test_macos_enhanced_stop_listening(self, sample_hotkey_config):
         """测试增强的macOS停止监听功能"""
