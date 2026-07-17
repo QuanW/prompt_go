@@ -20,6 +20,7 @@ import argparse
 import logging
 import time
 import asyncio
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -74,6 +75,8 @@ class PromptManager:
         
         # 进程管理
         self.pid_file = None
+        self.instance_lock_file = None
+        self.instance_lock_path = None
         self._shutdown_event = None
         
         logger = logging.getLogger(__name__)
@@ -528,6 +531,75 @@ class PromptManager:
         
         return status
     
+    def acquire_instance_lock(self, lock_file_path: Optional[str] = None) -> bool:
+        """获取用户级实例锁，避免不同项目目录同时监听全局快捷键。"""
+        logger = logging.getLogger(__name__)
+
+        if self.instance_lock_file:
+            return True
+
+        lock_path = Path(lock_file_path or Path(tempfile.gettempdir()) / f"prompt_go_{os.getuid()}.lock")
+
+        try:
+            import fcntl
+
+            lock_file = lock_path.open('a+', encoding='utf-8')
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                lock_file.seek(0)
+                owner = lock_file.read().strip()
+                if owner:
+                    logger.error(f"已有Prompt GO实例在运行: {owner}")
+                else:
+                    logger.error(f"已有Prompt GO实例在运行，锁文件: {lock_path}")
+                lock_file.close()
+                return False
+
+            lock_file.seek(0)
+            lock_file.truncate()
+            lock_file.write(f"pid={os.getpid()} cwd={Path.cwd()} main={Path(__file__).resolve()}\n")
+            lock_file.flush()
+
+            self.instance_lock_file = lock_file
+            self.instance_lock_path = lock_path
+            logger.info(f"实例锁已获取: {lock_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"获取实例锁失败: {e}")
+            return False
+
+    def release_instance_lock(self):
+        """释放用户级实例锁。"""
+        logger = logging.getLogger(__name__)
+
+        if not self.instance_lock_file:
+            return
+
+        try:
+            import fcntl
+
+            lock_path = self.instance_lock_path
+            self.instance_lock_file.seek(0)
+            self.instance_lock_file.truncate()
+            self.instance_lock_file.flush()
+            fcntl.flock(self.instance_lock_file.fileno(), fcntl.LOCK_UN)
+            self.instance_lock_file.close()
+            self.instance_lock_file = None
+            self.instance_lock_path = None
+
+            if lock_path and lock_path.exists():
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
+
+            logger.info(f"实例锁已释放: {lock_path}")
+
+        except Exception as e:
+            logger.warning(f"释放实例锁失败: {e}")
+
     def create_pid_file(self, pid_file_path: str = "prompt_manager.pid") -> bool:
         """
         创建PID文件
@@ -635,9 +707,10 @@ class PromptManager:
             logger.info("4. 保存最终状态...")
             self._print_statistics()
             
-            # 5. 删除PID文件
+            # 5. 删除PID文件和实例锁
             logger.info("5. 清理PID文件...")
             self.remove_pid_file()
+            self.release_instance_lock()
             
             self.running = False
             logger.info("优雅关闭完成")
@@ -647,6 +720,7 @@ class PromptManager:
             # 强制停止
             self.running = False
             self.remove_pid_file()
+            self.release_instance_lock()
     
     def wait_for_shutdown(self):
         """等待关闭信号"""
@@ -750,20 +824,27 @@ def main():
         logger.info("本地提示词管理软件 v1.0.0")
         logger.info("=" * 50)
         
-        # 创建PID文件
+        # 获取用户级实例锁，再创建项目PID文件
+        if not prompt_manager.acquire_instance_lock():
+            logger.error("实例锁获取失败，可能已有其他目录的Prompt GO在运行")
+            sys.exit(1)
+
         if not prompt_manager.create_pid_file():
             logger.error("PID文件创建失败，可能程序已在运行")
+            prompt_manager.release_instance_lock()
             sys.exit(1)
         
         if not prompt_manager.initialize():
             logger.error("初始化失败，程序退出")
             prompt_manager.remove_pid_file()
+            prompt_manager.release_instance_lock()
             sys.exit(1)
         
         # 启动
         if not prompt_manager.start():
             logger.error("启动失败，程序退出")
             prompt_manager.remove_pid_file()
+            prompt_manager.release_instance_lock()
             sys.exit(1)
         
         # 主循环
@@ -783,6 +864,8 @@ def main():
         # 确保优雅关闭
         if prompt_manager.running:
             prompt_manager.graceful_shutdown()
+        else:
+            prompt_manager.release_instance_lock()
 
 
 if __name__ == "__main__":

@@ -101,7 +101,7 @@ class TestPromptManager:
         mock_global_config_instance.load_config.assert_called_once()
         mock_hotkey_config_instance.load_config.assert_called_once()
         mock_text_processor_instance.get_platform_capabilities.assert_called_once()
-        mock_hotkey_listener_instance.set_template_handler.assert_called_once()
+        mock_hotkey_listener_instance.register_all_hotkeys.assert_called_once()
     
     @patch('main.initialize_on_startup')
     def test_initialize_failure(self, mock_initialize, prompt_manager):
@@ -150,7 +150,8 @@ class TestPromptManager:
             'copy_simulation_available': True
         }
         mock_hotkey_listener_instance = Mock()
-        mock_hotkey_listener_instance.start.return_value = True
+        mock_hotkey_listener_instance.is_listening = False
+        mock_hotkey_listener_instance.start_listening.return_value = True
         mock_hotkey_listener_instance.get_current_mappings.return_value = {}
         
         mock_global_config.return_value = mock_global_config_instance
@@ -170,7 +171,7 @@ class TestPromptManager:
         assert prompt_manager.start_time is not None
         
         # 验证调用
-        mock_hotkey_listener_instance.start.assert_called_once()
+        mock_hotkey_listener_instance.start_listening.assert_called_once()
     
     def test_start_already_running(self, prompt_manager):
         """测试重复启动"""
@@ -206,7 +207,8 @@ class TestPromptManager:
         }
         mock_text_processor_instance._model_clients = {}
         mock_hotkey_listener_instance = Mock()
-        mock_hotkey_listener_instance.start.return_value = True
+        mock_hotkey_listener_instance.is_listening = False
+        mock_hotkey_listener_instance.start_listening.return_value = True
         mock_hotkey_listener_instance.get_current_mappings.return_value = {}
         
         mock_global_config.return_value = mock_global_config_instance
@@ -222,7 +224,7 @@ class TestPromptManager:
         
         # 验证结果
         assert prompt_manager.running == False
-        mock_hotkey_listener_instance.stop.assert_called_once()
+        mock_hotkey_listener_instance.stop_listening.assert_called_once()
     
     @patch('main.initialize_on_startup')
     @patch('main.GlobalConfigManager')
@@ -261,6 +263,31 @@ class TestPromptManager:
         assert mock_hotkey_config_instance.load_config.call_count == 2
         mock_hotkey_listener_instance.reload_config.assert_called_once()
     
+    def test_instance_lock_success_and_release(self, prompt_manager, tmp_path):
+        """测试用户级实例锁获取和释放"""
+        lock_path = tmp_path / "prompt_go.lock"
+
+        assert prompt_manager.acquire_instance_lock(str(lock_path)) == True
+        assert prompt_manager.instance_lock_file is not None
+        assert lock_path.exists()
+        assert f"pid={os.getpid()}" in lock_path.read_text()
+
+        prompt_manager.release_instance_lock()
+        assert prompt_manager.instance_lock_file is None
+        assert not lock_path.exists()
+
+    def test_instance_lock_conflict(self, prompt_manager, tmp_path):
+        """测试实例锁冲突"""
+        first = PromptManager(config_dir=str(tmp_path / "config1"), prompt_dir=str(tmp_path / "prompt1"))
+        lock_path = tmp_path / "prompt_go.lock"
+
+        assert first.acquire_instance_lock(str(lock_path)) == True
+        try:
+            assert prompt_manager.acquire_instance_lock(str(lock_path)) == False
+            assert prompt_manager.instance_lock_file is None
+        finally:
+            first.release_instance_lock()
+
     def test_get_status_initial(self, prompt_manager):
         """测试获取初始状态"""
         status = prompt_manager.get_status()
