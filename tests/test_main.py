@@ -36,10 +36,14 @@ class TestPromptManager:
         shutil.rmtree(prompt_dir)
     
     @pytest.fixture
-    def prompt_manager(self, temp_dirs):
+    def prompt_manager(self, temp_dirs, tmp_path):
         """创建PromptManager实例"""
         config_dir, prompt_dir = temp_dirs
-        return PromptManager(config_dir=config_dir, prompt_dir=prompt_dir)
+        return PromptManager(
+            config_dir=config_dir,
+            prompt_dir=prompt_dir,
+            runtime_status_path=str(tmp_path / "runtime" / "status.json"),
+        )
     
     def test_prompt_manager_init(self, prompt_manager, temp_dirs):
         """测试PromptManager初始化"""

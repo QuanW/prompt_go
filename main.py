@@ -37,6 +37,7 @@ try:
         TextProcessor
     )
     from modules.hotkey_listener import HotkeyListener
+    from modules.runtime_status import RuntimeStatus, classify_error
 except ImportError as e:
     print(f"错误：无法导入必要的模块 - {e}")
     print("请确保所有模块文件都存在且正确安装了依赖包")
@@ -46,13 +47,19 @@ except ImportError as e:
 class PromptManager:
     """本地提示词管理软件主类"""
     
-    def __init__(self, config_dir: str = "config", prompt_dir: str = "prompt"):
+    def __init__(
+        self,
+        config_dir: str = "config",
+        prompt_dir: str = "prompt",
+        runtime_status_path: Optional[str] = None,
+    ):
         """
         初始化提示词管理器
         
         Args:
             config_dir: 配置文件目录
             prompt_dir: 提示词模板目录
+            runtime_status_path: 运行状态文件路径，用于测试或外部工具隔离
         """
         self.config_dir = Path(config_dir)
         self.prompt_dir = Path(prompt_dir)
@@ -78,6 +85,8 @@ class PromptManager:
         self.instance_lock_file = None
         self.instance_lock_path = None
         self._shutdown_event = None
+        status_path = runtime_status_path or os.environ.get("PROMPT_GO_STATUS_FILE")
+        self.runtime_status = RuntimeStatus(Path(status_path) if status_path else Path("runtime") / "status.json")
         
         logger = logging.getLogger(__name__)
         logger.info(f"提示词管理器初始化 - 配置目录: {config_dir}, 模板目录: {prompt_dir}")
@@ -313,6 +322,9 @@ class PromptManager:
             try:
                 self.global_config.load_config()
                 self.hotkey_config.load_config()
+                self.runtime_status.set_api_status(self.global_config)
+                if self.global_config.get('logging.auto_cleanup', False):
+                    self.cleanup_old_logs(days=self.global_config.get('logging.cleanup_days', 30))
                 logger.info("配置文件加载成功")
             except Exception as e:
                 logger.warning(f"配置文件加载失败，将使用默认配置: {e}")
@@ -347,6 +359,7 @@ class PromptManager:
             return True
             
         except Exception as e:
+            self.runtime_status.set_error(f"初始化过程中发生异常: {e}", "unknown")
             logger.error(f"初始化过程中发生异常: {e}")
             return False
     
@@ -359,9 +372,11 @@ class PromptManager:
             try:
                 logger.info(f"处理模板: {template_name}")
                 self.processed_requests += 1
+                self.runtime_status.set_trigger_started(template_name)
                 
                 # 执行完整的文本处理流程
                 result = self.text_processor.process_template_with_ai_complete(template_name)
+                self.runtime_status.set_trigger_result(template_name, result)
                 
                 if result['success']:
                     logger.info(f"模板处理成功: {template_name}")
@@ -370,8 +385,10 @@ class PromptManager:
                     self.error_count += 1
                     
             except Exception as e:
-                logger.error(f"快捷键处理异常: {e}")
+                error_message = f"快捷键处理异常: {e}"
+                logger.error(error_message)
                 self.error_count += 1
+                self.runtime_status.set_error(error_message, classify_error(error_message))
         
         # 设置回调函数
         if self.hotkey_listener:
@@ -397,18 +414,30 @@ class PromptManager:
             if not all([self.global_config, self.hotkey_config, 
                        self.text_processor, self.hotkey_listener]):
                 logger.error("组件未完全初始化，无法启动")
+                self.runtime_status.set_error("组件未完全初始化，无法启动", "unknown")
                 return False
             
             # 启动快捷键监听器（如果尚未启动）
             if not self.hotkey_listener.is_listening:
                 if not self.hotkey_listener.start_listening():
                     logger.error("快捷键监听器启动失败")
+                    self.runtime_status.set_error("快捷键监听器启动失败", "hotkey")
                     return False
             else:
                 logger.info("快捷键监听器已在运行中")
             
             self.running = True
             self.start_time = time.time()
+            backend = getattr(self.hotkey_listener, '_listener_backend', None)
+            self.runtime_status.update(
+                state="running",
+                pid=os.getpid(),
+                backend=backend,
+                counters={
+                    "processed_requests": self.processed_requests,
+                    "error_count": self.error_count,
+                },
+            )
             
             logger.info("提示词管理器启动成功")
             logger.info("快捷键监听已激活，可以开始使用快捷键...")
@@ -419,6 +448,7 @@ class PromptManager:
             return True
             
         except Exception as e:
+            self.runtime_status.set_error(f"启动过程中发生异常: {e}", "unknown")
             logger.error(f"启动过程中发生异常: {e}")
             return False
     
@@ -459,6 +489,13 @@ class PromptManager:
                 self.text_processor._model_clients.clear()
             
             self.running = False
+            self.runtime_status.update(
+                state="stopped",
+                counters={
+                    "processed_requests": self.processed_requests,
+                    "error_count": self.error_count,
+                },
+            )
             
             # 打印统计信息
             self._print_statistics()
@@ -494,6 +531,7 @@ class PromptManager:
             
             if self.global_config:
                 self.global_config.load_config()
+                self.runtime_status.set_api_status(self.global_config)
             
             if self.hotkey_config:
                 self.hotkey_config.load_config()
@@ -504,6 +542,7 @@ class PromptManager:
             logger.info("配置重新加载完成")
             
         except Exception as e:
+            self.runtime_status.set_error(f"配置重新加载失败: {e}", "unknown")
             logger.error(f"配置重新加载失败: {e}")
     
     def get_status(self) -> Dict[str, Any]:
@@ -713,12 +752,20 @@ class PromptManager:
             self.release_instance_lock()
             
             self.running = False
+            self.runtime_status.update(
+                state="stopped",
+                counters={
+                    "processed_requests": self.processed_requests,
+                    "error_count": self.error_count,
+                },
+            )
             logger.info("优雅关闭完成")
             
         except Exception as e:
             logger.error(f"优雅关闭过程中发生异常: {e}")
             # 强制停止
             self.running = False
+            self.runtime_status.set_error(f"优雅关闭过程中发生异常: {e}", "unknown")
             self.remove_pid_file()
             self.release_instance_lock()
     

@@ -6,6 +6,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PID_FILE="${PROMPT_GO_PID_FILE:-$PROJECT_DIR/prompt_manager.pid}"
 LOG_FILE="${PROMPT_GO_LOG_FILE:-$PROJECT_DIR/prompt_manager.log}"
+STATUS_FILE="${PROMPT_GO_STATUS_FILE:-$PROJECT_DIR/runtime/status.json}"
 CONFIG_DIR="${PROMPT_GO_CONFIG_DIR:-config}"
 PROMPT_DIR="${PROMPT_GO_PROMPT_DIR:-prompt}"
 LAUNCH_AGENT_LABEL="${PROMPT_GO_LAUNCH_AGENT_LABEL:-com.quanw.prompt-go}"
@@ -313,6 +314,46 @@ other_prompt_go_processes() {
     '
 }
 
+print_runtime_status() {
+  if [[ ! -f "$STATUS_FILE" ]]; then
+    echo "Runtime status: not available"
+    return 0
+  fi
+
+  /usr/bin/python3 - "$STATUS_FILE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text(encoding='utf-8'))
+except Exception as exc:
+    print(f"Runtime status: unreadable ({exc})")
+    raise SystemExit(0)
+
+providers = data.get('api', {}).get('providers', {})
+configured = [name for name, cfg in providers.items() if cfg.get('configured')]
+model = data.get('model', {}) or {}
+trigger = data.get('last_trigger') or {}
+last_error = data.get('last_error') or {}
+
+print(f"Runtime status file: {path}")
+print(f"Runtime state: {data.get('state', 'unknown')}")
+print(f"Backend: {data.get('backend') or 'unknown'}")
+print(f"API configured: {', '.join(configured) if configured else 'none'}")
+print(f"Current model: {model.get('name') or 'unknown'}")
+if trigger:
+    label = trigger.get('status') or 'unknown'
+    template = trigger.get('template') or 'unknown'
+    error_type = trigger.get('error_type')
+    suffix = f" ({error_type})" if error_type else ""
+    print(f"Last trigger: {label}{suffix} - {template}")
+if last_error:
+    print(f"Last error type: {last_error.get('type') or 'unknown'}")
+PY
+}
+
 doctor() {
   echo "Prompt GO diagnostics"
   echo "Project: $PROJECT_DIR"
@@ -324,6 +365,8 @@ doctor() {
   echo "Resolved Python: $RESOLVED_PYTHON"
   echo "Status: $(status)"
   echo "LaunchAgent: $(agent_status)"
+  echo
+  print_runtime_status
   echo
 
   if is_macos; then

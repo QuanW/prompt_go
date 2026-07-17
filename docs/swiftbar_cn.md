@@ -91,6 +91,22 @@ scripts/prompt_goctl.sh install-agent
 
 如果暂时不迁移目录，`prompt_goctl.sh start` 会在 LaunchAgent 启动失败时回退到 SwiftBar 直启模式。
 
+## 状态显示
+
+SwiftBar 菜单栏标题使用紧凑颜色状态灯，节省菜单栏空间：
+
+- 绿色：Prompt GO 正在运行。
+- 橙色：存在权限警告或 stale PID。
+- 红色：已停止或状态命令失败。
+
+下拉菜单会显示更详细的运行状态，包括当前后端、模型、API 配置状态和最近一次触发结果。这些信息来自本地运行状态文件：
+
+```bash
+runtime/status.json
+```
+
+该文件只保存脱敏状态，例如 API provider 是否已配置、当前模型名、最近错误类型，不保存 API key。
+
 ## macOS 权限
 
 如果通过 SwiftBar 启动 Prompt GO，需要给 SwiftBar 授予必要权限：

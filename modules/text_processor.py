@@ -874,6 +874,7 @@ class TextProcessor:
             template_content = template_result.get('template_content', {})
             model_name = template_content.get('model_name')
             model_config = template_content.get('model_config', {})
+            result['model_name'] = model_name
             
             if not model_name:
                 result['error'] = "模板中未配置模型名称"
@@ -888,6 +889,7 @@ class TextProcessor:
             # 4. 确定API请求中使用的模型名称
             # 如果是厂商,模型格式，使用具体模型名；否则使用原模型名
             api_model_name = self._get_api_model_name(model_name)
+            result['api_model_name'] = api_model_name
             
             # 5. 创建API请求
             request = ModelRequest(

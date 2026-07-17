@@ -48,6 +48,7 @@ config/hotkey_mapping.yaml
 !config/hotkey_mapping.example.yaml
 config/hotkey_mapping.yaml.backup_*
 config/listener_state.json
+runtime/*.json
 
 # OS-specific files
 .DS_Store

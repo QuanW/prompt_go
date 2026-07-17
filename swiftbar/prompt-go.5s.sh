@@ -3,6 +3,7 @@
 PROMPT_GO_DIR="${PROMPT_GO_DIR:-/Users/wquan/Developer/prompt_go}"
 CTL="$PROMPT_GO_DIR/scripts/prompt_goctl.sh"
 LOG_FILE="$PROMPT_GO_DIR/prompt_manager.log"
+STATUS_FILE="$PROMPT_GO_DIR/runtime/status.json"
 
 if [[ ! -x "$CTL" ]]; then
   echo "Prompt GO: setup needed"
@@ -15,6 +16,45 @@ fi
 STATUS="$("$CTL" status 2>/dev/null || echo "error")"
 AGENT_STATUS="$("$CTL" agent-status 2>/dev/null || echo "unknown")"
 PERMISSION_WARNING=""
+
+BACKEND="unknown"
+MODEL="unknown"
+API_CONFIGURED="unknown"
+LAST_TRIGGER="none"
+LAST_ERROR_TYPE=""
+if [[ -f "$STATUS_FILE" ]]; then
+  STATUS_LINES="$(/usr/bin/python3 - "$STATUS_FILE" <<'PY' 2>/dev/null || true
+import json
+import sys
+from pathlib import Path
+try:
+    data = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+except Exception:
+    raise SystemExit(0)
+providers = data.get('api', {}).get('providers', {})
+configured = [name for name, cfg in providers.items() if cfg.get('configured')]
+model = (data.get('model') or {}).get('name') or 'unknown'
+trigger = data.get('last_trigger') or {}
+error = data.get('last_error') or {}
+print(f"BACKEND={data.get('backend') or 'unknown'}")
+print(f"MODEL={model}")
+print(f"API_CONFIGURED={','.join(configured) if configured else 'none'}")
+if trigger:
+    print(f"LAST_TRIGGER={(trigger.get('status') or 'unknown')}:{(trigger.get('template') or 'unknown')}")
+if error:
+    print(f"LAST_ERROR_TYPE={error.get('type') or ''}")
+PY
+)"
+  while IFS='=' read -r key value; do
+    case "$key" in
+      BACKEND) BACKEND="$value" ;;
+      MODEL) MODEL="$value" ;;
+      API_CONFIGURED) API_CONFIGURED="$value" ;;
+      LAST_TRIGGER) LAST_TRIGGER="$value" ;;
+      LAST_ERROR_TYPE) LAST_ERROR_TYPE="$value" ;;
+    esac
+  done <<< "$STATUS_LINES"
+fi
 
 if [[ -f "$LOG_FILE" ]]; then
   RECENT_LOG="$(tail -n 200 "$LOG_FILE" 2>/dev/null || true)"
@@ -44,6 +84,13 @@ case "$STATUS" in
     echo "---"
     echo "Status: $STATUS_LABEL | color=$STATUS_COLOR"
     echo "PID: $PID"
+    echo "Backend: $BACKEND"
+    echo "Model: $MODEL"
+    echo "API: $API_CONFIGURED"
+    echo "Last: $LAST_TRIGGER"
+    if [[ -n "$LAST_ERROR_TYPE" ]]; then
+      echo "Last error: $LAST_ERROR_TYPE | color=orange"
+    fi
     echo "Agent: $AGENT_STATUS"
     if [[ "$PERMISSION_WARNING" == "yes" ]]; then
       echo "Keyboard permission may be missing | color=orange"
