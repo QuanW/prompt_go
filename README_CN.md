@@ -1,107 +1,67 @@
-# 🚀 Prompt GO - AI提示词瞬间调用,无需打开窗口
+# Prompt GO
 
-> 一款基于Python的轻量级本地提示词管理软件，通过全局快捷键实现任意位置的AI文本处理
+Prompt GO 是一个 macOS 本地 AI 文本处理工具。你可以在任意应用中选中文本，按下全局快捷键，让本地后台进程读取选中文本、套用 Markdown 提示词模板、调用大模型 API，并把结果自动输出回当前光标位置。
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+当前 fork 的重点是：macOS 菜单栏/LaunchAgent 使用体验、硅基流动 DeepSeek 兼容、原生全局快捷键 helper、可观测诊断，以及适合个人机器长期运行的工程化整理。
 
-<div align="center">
+## 基本功能
 
-[English](README.md) | [中文](README_CN.md)
+- 全局快捷键触发：默认 `ctrl+shift+1/2/3/0`，映射到不同模板。
+- 选中文本处理：从当前应用读取选中文本，作为 `{{input}}` 注入模板。
+- Markdown 模板：模板放在 `prompt/`，支持 YAML front matter 配置模型、温度、token 等参数。
+- 流式输出：调用模型后将响应逐步输出到当前光标位置。
+- DeepSeek/SiliconFlow 兼容：支持官方 DeepSeek API，也支持硅基流动 OpenAI-compatible DeepSeek 模型名。
+- macOS 原生快捷键：使用 C native helper 调用 `RegisterEventHotKey`，不再用 pynput 监听全局键盘事件。
+- 菜单栏控制：通过 SwiftBar 启动、停止、重启、重载配置、查看状态。
+- LaunchAgent 后台运行：由 macOS launchd 管理后台进程。
+- 本地状态诊断：`doctor` 和 SwiftBar 读取脱敏的 `runtime/status.json`，显示运行态、API 配置状态、当前模型、最近触发结果。
 
-</div>
+## 系统要求
 
-## 📖 项目简介
+- macOS。
+- Python 3.9 或更高版本。
+- Xcode Command Line Tools，用于编译 `native/macos_hotkey_helper.c`。
+- SwiftBar，可选但推荐，用于菜单栏控制。
+- 一个兼容的 DeepSeek API 服务，例如 DeepSeek 官方或硅基流动。
 
-Prompt Manager 是一款专为提升文本处理效率而设计的本地AI工具。**用户可以在任何应用程序中选中文本，通过预设的全局快捷键触发AI模型处理，并将结果实时输出到当前光标位置。** 无需切换应用，无需手动复制粘贴，实现真正的无缝AI协作体验。
-
-### ✨ 核心特性
-
-- **全局快捷键**：`Ctrl+Shift+1/2` 一键触发，支持任意自定义组合键
-- **智能选文**：自动获取当前选中的文本内容
-- **实时输出**：AI响应逐字符流式输出到光标位置
-- **零切换**：无需离开当前应用，保持工作流连续性
-- **本地运行**：所有处理在本地完成，保护隐私安全
-- **灵活模板**：使用Markdown格式的提示词模板，支持变量替换
-
-
-## 🎬 功能演示
-
-观看这些动画演示，了解 Prompt GO 的强大功能：
-
-### 📝 内容整理演示
-![内容整理演示](docs/images/CleanShot%202025-07-24%20at%2020.39.57.gif)
-
-### 🌐 翻译功能演示
-![翻译功能演示](docs/images/CleanShot%202025-07-24%20at%2020.42.00.gif)
-
-### ⚡ mermaid画图
-![实时处理演示](docs/images/CleanShot%202025-07-24%20at%2020.44.17.gif)
-
-
-## 🚀 快速上手
-
-### 📋 系统要求
-- **Python**: 3.8 或更高版本
-- **操作系统**: macOS 10.14+, Windows 10+, Linux (Ubuntu 18.04+)
-
-### 🛠️ Mac系统权限设置
-
-在macOS上使用本软件需要开启终端的辅助功能权限：
-
-![系统偏好设置](docs/images/system_preferences.png)
-![辅助功能设置](docs/images/accessibility_settings.png)
-
-**设置步骤：**
-1. 打开"系统偏好设置" → "安全性与隐私"
-2. 点击"隐私"选项卡
-3. 在左侧列表中选择"辅助功能"
-4. 点击锁图标解锁设置
-5. 勾选"终端"应用（或Python应用）
-6. 重启程序即可正常使用
-
-### 🛠️ 安装步骤 
+安装 Command Line Tools：
 
 ```bash
-# 1. 克隆项目
-git clone https://github.com/astordu/prompt_go.git
+xcode-select --install
+```
+
+## 安装
+
+推荐放在不容易触发 macOS 隐私目录限制的位置，例如：
+
+```bash
+mkdir -p ~/Developer
+cd ~/Developer
+git clone git@github.com:QuanW/prompt_go.git
 cd prompt_go
-
-# 2. 安装依赖（推荐uv）
-uv sync
-# 或者使用 pip
-pip install -r requirements.txt
-
-# 3. 配置API密钥
-cp config/global_config.example.yaml config/global_config.yaml
-# 编辑 config/global_config.yaml，填入你的API密钥 (目前只支持deepseek)
-
-# 4.配置快捷键
-cp config/hotkey_mapping.example.yaml config/hotkey_mapping.yaml
-
-# 5. 启动程序
-uv run python main.py
+git checkout codex/siliconflow-api-compat
 ```
 
-### 菜单栏控制（SwiftBar）
-
-如果希望避免长期占用一个 Terminal 窗口，可以使用 SwiftBar 菜单栏脚本启动、停止和重载 Prompt GO：
+创建虚拟环境并安装依赖：
 
 ```bash
-scripts/prompt_goctl.sh status
-scripts/prompt_goctl.sh start
-scripts/prompt_goctl.sh stop
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
-完整配置见 [SwiftBar 菜单栏控制](docs/swiftbar_cn.md)。
+创建本机配置文件：
 
-### 🔑 获取API密钥
+```bash
+cp config/global_config.example.yaml config/global_config.yaml
+cp config/hotkey_mapping.example.yaml config/hotkey_mapping.yaml
+```
 
-#### Deepseek API
-1. 访问 [Deepseek平台](https://platform.deepseek.com/)
-2. 注册账号并创建API密钥
-3. 在 `config/global_config.yaml` 中配置：
+`config/global_config.yaml`、`config/hotkey_mapping.yaml`、日志、PID、runtime 状态和 `.venv/` 都是本机文件，已被 `.gitignore` 忽略，不应提交。
+
+## 配置 API
+
+DeepSeek 官方示例：
 
 ```yaml
 api:
@@ -111,107 +71,205 @@ api:
     model: deepseek-chat
 ```
 
-### 🎯 5分钟体验
-
-1. **启动程序**：`uv run python main.py`
-2. **选择文本**：在任何应用中选中一段文字
-3. **触发AI**：按 `Ctrl+Shift+1`（内容整理）或 `Ctrl+Shift+2`（翻译）
-4. **查看结果**：AI处理结果会自动插入到光标位置
-
-## 📁 项目详情
-
-### 文件结构
-
-```
-prompt_go/
-├── main.py                      # 主程序入口
-├── config/
-│   ├── global_config.yaml      # 全局配置（API密钥等）
-│   ├── hotkey_mapping.yaml     # 快捷键映射
-│   └── *.example.yaml          # 配置模板
-├── prompt/                     # 提示词模板目录
-│   ├── tidy_content.md         # 内容整理模板
-│   └── translate.md            # 翻译模板
-├── modules/                   # 核心功能模块
-└── tests/                     # 测试套件
-```
-
-### 基础配置
-
-#### 全局配置 (`config/global_config.yaml`)
+硅基流动示例：
 
 ```yaml
 api:
   deepseek:
-    base_url: https://api.deepseek.com
-    key: 'sk-your-deepseek-api-key'
-    model: deepseek-chat
-    max_tokens: 2000
-    temperature: 0.7
-
-logging:
-  level: INFO
-  file: prompt_manager.log
-  max_size: 10485760  # 10MB
-  backup_count: 5
-
-performance:
-  typing_speed: 0.005      # 打字速度（秒/字符）
-  hotkey_response_timeout: 0.5
-  template_cache_enabled: true
+    base_url: https://api.siliconflow.cn/v1
+    key: 'sk-your-siliconflow-api-key'
+    model: deepseek-ai/DeepSeek-V3.2
 ```
 
-#### 快捷键映射 (`config/hotkey_mapping.yaml`)
-
-```yaml
-hotkeys:
-  ctrl+shift+1: tidy_content.md        # 内容整理
-  ctrl+shift+2: translate.md           # 翻译功能
-
-settings:
-  enabled: true
-  response_delay: 100  # 响应延迟（毫秒）
-```
-
-### 模板创建
-
-创建 `.md` 文件在 `prompt/` 目录下：
+模板 front matter 中可以使用 `厂商,模型` 格式，例如：
 
 ```markdown
-model: deepseek,deepseek-chat
+model: deepseek,deepseek-ai/DeepSeek-V3.2
 temperature: 0.3
 max_tokens: 2000
 
 ---
 
-你是一个专业的翻译助手。请将以下文本翻译成英文，保持原文的语气和格式：
+请整理下面的内容：
 
 {{input}}
-
-请提供准确、自然的翻译，注意上下文的连贯性。
 ```
 
-## 📄 许可证
+## 配置快捷键
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+编辑 `config/hotkey_mapping.yaml`：
 
-## 🙏 致谢
+```yaml
+hotkeys:
+  ctrl+shift+1: tidy_content_plain_txt.md
+  ctrl+shift+2: translate_plain_txt.md
+  ctrl+shift+3: corect_english_grammer.md
+  ctrl+shift+0: mermaid.md
 
-感谢以下开源项目：
-- [pynput](https://github.com/moses-palmer/pynput) - 文本输入按键自动化
-- [pyperclip](https://github.com/asweigart/pyperclip) - 剪贴板操作
-- [PyYAML](https://github.com/yaml/pyyaml) - YAML解析
-- [pytest](https://github.com/pytest-dev/pytest) - 测试框架
-- [uv](https://github.com/astral-sh/uv) - Python包管理
+settings:
+  enabled: true
+  response_delay: 100
+```
 
----
+快捷键监听在 macOS 上只使用原生 helper。若快捷键被其他应用占用，helper 会注册失败或该组合无法触发，此时请换一个组合并执行 reload/restart。
 
-<div align="center">
+## 使用
 
-**⭐ 如果这个项目对您有帮助，请给它一个星标！**
+首次建议先安装 LaunchAgent：
 
-**🐛 发现问题？** [提交Issue](https://github.com/astordu/prompt_go/issues) | **💡 有建议？** [开启讨论](https://github.com/astordu/prompt_go/discussions)
+```bash
+scripts/prompt_goctl.sh install-agent
+scripts/prompt_goctl.sh start
+scripts/prompt_goctl.sh doctor
+```
 
-Made with ❤️ for the AI community
+常用控制命令：
 
-</div>
+```bash
+scripts/prompt_goctl.sh status
+scripts/prompt_goctl.sh start
+scripts/prompt_goctl.sh stop
+scripts/prompt_goctl.sh restart
+scripts/prompt_goctl.sh reload
+scripts/prompt_goctl.sh log
+scripts/prompt_goctl.sh doctor
+```
+
+基本使用流程：
+
+1. 在任意应用里选中一段文本。
+2. 按下 `ctrl+shift+1`、`ctrl+shift+2` 等配置好的快捷键。
+3. Prompt GO 自动读取选中文本、调用对应模板和模型。
+4. 结果会输出到当前光标位置。
+
+如果你修改了 `config/hotkey_mapping.yaml` 或模板文件，可以执行：
+
+```bash
+scripts/prompt_goctl.sh reload
+```
+
+如果 reload 后快捷键不生效，执行：
+
+```bash
+scripts/prompt_goctl.sh restart
+```
+
+## SwiftBar 菜单栏控制
+
+安装 SwiftBar 后，将插件脚本软链接到 SwiftBar 插件目录。示例：
+
+```bash
+ln -sf ~/Developer/prompt_go/swiftbar/prompt-go.5s.sh ~/Documents/SwiftBar/prompt-go.5s.sh
+```
+
+确保脚本可执行：
+
+```bash
+chmod +x scripts/prompt_goctl.sh
+chmod +x swiftbar/prompt-go.5s.sh
+```
+
+SwiftBar 菜单栏会显示一个紧凑状态点：
+
+- 绿色：服务正在运行。
+- 橙色：可能存在权限告警或 stale PID。
+- 红色：服务停止或状态命令失败。
+
+下拉菜单可执行 Stop、Restart、Reload Config、Doctor、Open Log 等操作。更详细说明见 [docs/swiftbar_cn.md](docs/swiftbar_cn.md)。
+
+## macOS 权限
+
+根据启动方式，可能需要给不同应用授权：
+
+- SwiftBar 启动或控制：给 SwiftBar 授予 Accessibility。
+- LaunchAgent 启动：macOS 可能要求给实际 Python 可执行文件授予 Accessibility/Input Monitoring。
+- Terminal 手动启动：给 Terminal 或 iTerm2 授权。
+
+查看实际 Python 路径：
+
+```bash
+scripts/prompt_goctl.sh doctor
+```
+
+常见路径类似：
+
+```text
+/Users/wquan/Developer/prompt_go/.venv/bin/python
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9
+```
+
+如果 `.venv/bin/python` 是符号链接，macOS 权限列表里可能需要添加最终解析出来的 Python 可执行文件。
+
+## 卸载
+
+停止服务并卸载 LaunchAgent：
+
+```bash
+cd ~/Developer/prompt_go
+scripts/prompt_goctl.sh stop
+scripts/prompt_goctl.sh uninstall-agent
+```
+
+删除 SwiftBar 软链接，按你的插件目录调整路径：
+
+```bash
+rm ~/Documents/SwiftBar/prompt-go.5s.sh
+```
+
+删除项目目录：
+
+```bash
+cd ~/Developer
+rm -rf prompt_go
+```
+
+如果你只想卸载后台服务但保留项目代码，只执行 `stop` 和 `uninstall-agent` 即可。
+
+## 换目录继续开发
+
+移动或重新 clone 到新目录后，需要重新生成 LaunchAgent plist 和 SwiftBar 软链接，因为它们包含项目绝对路径。
+
+```bash
+cd /new/path/prompt_go
+scripts/prompt_goctl.sh uninstall-agent
+scripts/prompt_goctl.sh install-agent
+scripts/prompt_goctl.sh restart
+ln -sf /new/path/prompt_go/swiftbar/prompt-go.5s.sh ~/Documents/SwiftBar/prompt-go.5s.sh
+scripts/prompt_goctl.sh doctor
+```
+
+如果换目录后权限失效，重新检查 macOS Accessibility/Input Monitoring 授权。
+
+## 开发与测试
+
+常用测试：
+
+```bash
+source .venv/bin/activate
+python -m pytest tests/test_hotkey_listener.py tests/test_runtime_status.py tests/test_main.py -q -p no:cacheprovider
+bash -n scripts/prompt_goctl.sh swiftbar/prompt-go.5s.sh
+git diff --check
+```
+
+完整测试里目前仍有部分上游遗留测试与当前实现不一致，例如 Kimi 枚举和文本过滤断言；开发新功能时优先跑受影响模块测试，并逐步修正旧测试。
+
+## 项目结构
+
+```text
+prompt_go/
+├── main.py                         # 主程序入口
+├── native/macos_hotkey_helper.c     # macOS 原生快捷键 helper
+├── scripts/prompt_goctl.sh          # 启动/停止/诊断/LaunchAgent 控制
+├── swiftbar/prompt-go.5s.sh         # SwiftBar 菜单栏插件
+├── modules/                         # 核心模块
+├── config/*.example.yaml            # 配置模板
+├── prompt/                          # 提示词模板
+├── docs/                            # 使用和开发文档
+└── tests/                           # 测试
+```
+
+## 相关文档
+
+- [SwiftBar 菜单栏控制](docs/swiftbar_cn.md)
+- [开发日志](docs/DEVELOPMENT_LOG_CN.md)
+- [CHANGELOG](CHANGELOG.md)

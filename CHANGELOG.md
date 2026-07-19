@@ -1,107 +1,80 @@
-# 更新日志
+# CHANGELOG
 
-本文档记录了项目的所有重要更改。
-
-格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
-并且本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+本文档记录当前 fork 的重要版本差异。更完整的开发背景见 [docs/DEVELOPMENT_LOG_CN.md](docs/DEVELOPMENT_LOG_CN.md)。
 
 ## [未发布]
 
-### 计划功能
-- 插件系统支持
-- 图形用户界面
-- 更多AI模型集成
-- 团队协作功能
+### 计划
+- 继续收敛上游遗留测试，修正 Kimi 枚举、文本过滤等与当前实现不一致的测试。
+- 进一步模板化安装流程，降低多台 Mac 部署成本。
+- 评估是否用更原生的 macOS 输出方式替换 `pynput.Controller` 文本输入自动化。
 
-## [1.0.0] - 2024-12-19
+## [0.6.0] - 2026-07-17
 
-### ✨ 新增
-- 🚀 **核心功能**
-  - 全局快捷键系统（`Ctrl+Alt+Cmd+1-9`）
-  - 智能文本选择和处理
-  - 实时AI对话和流式输出
-  - 跨平台支持（macOS、Windows、Linux）
+### 移除
+- 删除 macOS 上的 pynput 全局快捷键监听路径。
+- 删除旧的快捷键 backend 状态字段和 `Hotkey: native` 菜单展示。
+- 删除 `native_hotkeys` 示例配置开关。
 
-- 🎨 **模板系统**  
-  - Markdown模板支持
-  - YAML前置配置
-  - 占位符替换系统
-  - 模板热重载
+### 变更
+- 项目定位收敛为 macOS-only 工具。
+- `doctor` 和 SwiftBar 只展示运行态、API 配置状态、当前模型和最近触发结果。
+- `pynput` 仅保留用于文本输入/复制粘贴自动化，不再用于快捷键监听。
 
-- 🤖 **AI集成**
-  - Deepseek API支持
-  - Kimi API支持
-  - 流式输出处理
-  - 自动重试机制
+### 测试
+- 更新快捷键监听测试，覆盖 native helper 成功、失败和非 macOS unsupported 路径。
+- 修复 `tests/test_main.py` 中部分用例污染真实 `runtime/status.json` 的问题。
 
-- ⚙️ **配置管理**
-  - YAML配置文件
-  - 配置热重载
-  - 多环境配置支持
-  - 配置验证
+## [0.5.0] - 2026-07-17
 
-- ⚡ **性能优化**
-  - 快捷键响应时间 < 1ms
-  - 模板预加载
-  - 智能缓存系统
-  - 性能监控
+### 变更
+- macOS 快捷键监听固定走 C native helper，即 `RegisterEventHotKey` 路径。
+- 移除旧的 Python/ctypes Carbon 注册器。
+- native helper 启动失败时直接报错，不再回退到全键盘监听。
 
-- 🧪 **测试覆盖**
-  - 234个自动化测试
-  - 单元测试覆盖
-  - 集成测试
-  - 性能基准测试
-  - 端到端测试
+### 诊断
+- SwiftBar 和 doctor 显示 `Hotkey: native`，用于确认迁移阶段的实际监听路径。
 
-- 📖 **文档完善**
-  - 详细用户指南
-  - 配置示例
-  - API文档
-  - 故障排除指南
+## [0.4.0] - 2026-07-17
 
-### 🛠️ 技术实现
-- Python 3.8+ 支持
-- 异步编程架构
-- 模块化设计
-- 类型注解支持
-- 错误处理和日志系统
+### 新增
+- `modules/runtime_status.py`：写入脱敏运行状态 `runtime/status.json`。
+- `scripts/prompt_goctl.sh doctor`：显示项目路径、Python 路径、LaunchAgent 状态、API 配置状态、当前模型和最近错误。
+- SwiftBar 下拉菜单显示 API/model/last trigger/last error。
+- 日志清理入口和错误类型分类：permission、api、template、clipboard、hotkey、unknown。
 
-### 📊 项目统计
-- **代码行数**: 4,000+
-- **测试覆盖率**: 53%（核心模块>70%）
-- **文件数量**: 25+
-- **功能模块**: 6个核心模块
+### 变更
+- `pyproject.toml` Python 声明调整为 `>=3.9`。
+- 测试隔离 runtime status，避免污染真实运行状态。
 
----
+## [0.3.0] - 2026-07-17
 
-## 版本说明
+### 新增
+- SwiftBar 紧凑颜色状态点，节省菜单栏空间。
+- 用户级单实例锁，避免多个 Prompt GO 进程抢占快捷键。
+- duplicate process 检测，帮助定位多个旧进程同时运行的问题。
+- macOS Python 权限诊断，显示 `.venv/bin/python` 和 resolved Python 路径。
 
-### 语义化版本格式
+## [0.2.0] - 2026-07-17
 
-- **主版本号**：当进行不兼容的 API 更改时
-- **次版本号**：当添加向后兼容的功能时  
-- **修订号**：当进行向后兼容的错误修复时
+### 新增
+- SwiftBar 控制脚本，可执行 start/stop/restart/reload/doctor/open log。
+- LaunchAgent 安装、卸载和状态控制。
+- 项目路径迁移到 `~/Developer/prompt_go` 后的 plist/SwiftBar 路径更新。
 
-### 更新类型说明
+### 变更
+- 推荐用 LaunchAgent 管理后台服务，SwiftBar 作为菜单栏控制面板。
 
-- `✨ 新增`: 新功能
-- `🐛 修复`: 错误修复
-- `♻️ 重构`: 代码重构
-- `⚡ 性能`: 性能改进
-- `📝 文档`: 文档更新
-- `🎨 样式`: 代码格式化
-- `🧪 测试`: 测试相关
-- `🔧 配置`: 配置文件更改
-- `⬆️ 依赖`: 依赖更新
-- `🗑️ 移除`: 删除功能
+## [0.1.0] - 2026-07-17
 
----
+### 新增
+- SiliconFlow/DeepSeek 流式 SSE 兼容。
+- 支持硅基流动 DeepSeek 模型名，例如 `deepseek-ai/DeepSeek-V3.2`。
+- 改进 SSE 增量解码，避免中文流式内容被错误切分造成乱码解析失败。
 
-## 贡献指南
+## [upstream-1.0.0] - 2024-12-19
 
-如需添加新的更改日志条目：
-
-1. 在 `[未发布]` 部分添加条目
-2. 使用适当的更改类型标识
-3. 提供清晰的描述
-4. 在发布时移动到相应版本部分 
+### 来源
+- 基于 `astordu/prompt_go` 上游项目。
+- 上游提供模板、快捷键、文本处理、DeepSeek API、流式输出等基础能力。
+- 当前 fork 已显著偏向 macOS-only、本地 LaunchAgent/SwiftBar 工作流。

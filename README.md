@@ -1,205 +1,125 @@
-# 🚀 Prompt GO - Instant AI Prompt Access, No Window Required
+# Prompt GO
 
-> A lightweight local prompt management software based on Python, enabling AI text processing from anywhere through global hotkeys
+Prompt GO is a macOS local AI text-processing helper. Select text in any app, press a configured global hotkey, and Prompt GO applies a Markdown prompt template, calls a DeepSeek-compatible API, and writes the result back to the current cursor position.
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+This fork focuses on macOS daily use: SiliconFlow/DeepSeek compatibility, a native hotkey helper, LaunchAgent background service control, SwiftBar menu-bar controls, and local diagnostics.
 
-<div align="center">
+## Features
 
-[English](README.md) | [中文](README_CN.md)
+- Global hotkeys mapped to Markdown templates.
+- Local selected-text capture and cursor output.
+- Streaming API output.
+- DeepSeek official API and SiliconFlow DeepSeek model names.
+- macOS native hotkey helper based on `RegisterEventHotKey`.
+- LaunchAgent service management through `scripts/prompt_goctl.sh`.
+- SwiftBar menu-bar control.
+- Redacted runtime status for `doctor` and SwiftBar.
 
-</div>
+## Requirements
 
-## 📖 Project Introduction
-
-Prompt Manager is a local AI tool designed to enhance text processing efficiency. **Users can select text in any application, trigger AI model processing through preset global hotkeys, and output results in real-time to the current cursor position.** No need to switch applications or manually copy-paste, achieving a truly seamless AI collaboration experience.
-
-### ✨ Core Features
-
-- **Global Hotkeys**: `Ctrl+Shift+1/2` one-click trigger, supports arbitrary custom key combinations
-- **Smart Text Selection**: Automatically captures currently selected text content
-- **Real-time Output**: AI responses stream character by character to cursor position
-- **Zero Switching**: No need to leave the current application, maintaining workflow continuity
-- **Local Processing**: All processing done locally, protecting privacy and security
-- **Flexible Templates**: Uses Markdown format prompt templates with variable substitution support
-
-
-## 🎬 Demo Showcase
-
-Watch these animated demonstrations to see Prompt GO in action:
-
-### 📝 Content Organization Demo
-![Content Organization Demo](docs/images/CleanShot%202025-07-24%20at%2020.39.57.gif)
-
-### 🌐 Translation Demo  
-![Translation Demo](docs/images/CleanShot%202025-07-24%20at%2020.42.00.gif)
-
-### ⚡ mermaid Demo
-![Real-time Processing Demo](docs/images/CleanShot%202025-07-24%20at%2020.44.17.gif)
-
-
-## 🚀 Quick Start
-
-### 📋 System Requirements
-- **Python**: 3.8 or higher
-- **Operating System**: macOS 10.14+, Windows 10+, Linux (Ubuntu 18.04+)
-
-### 🛠️ Mac System Permission Setup
-
-Using this software on macOS requires enabling terminal accessibility permissions:
-
-![System Preferences](docs/images/system_preferences.png)
-![Accessibility Settings](docs/images/accessibility_settings.png)
-
-**Setup Steps:**
-1. Open "System Preferences" → "Security & Privacy"
-2. Click the "Privacy" tab
-3. Select "Accessibility" from the left sidebar
-4. Click the lock icon to unlock settings
-5. Check the "Terminal" app (or Python app)
-6. Restart the program to use normally
-
-### 🛠️ Installation Steps
+- macOS.
+- Python 3.9+.
+- Xcode Command Line Tools.
+- SwiftBar, optional but recommended.
 
 ```bash
-# 1. Clone the project
-git clone https://github.com/astordu/prompt_go.git
+xcode-select --install
+```
+
+## Install
+
+```bash
+mkdir -p ~/Developer
+cd ~/Developer
+git clone git@github.com:QuanW/prompt_go.git
 cd prompt_go
+git checkout codex/siliconflow-api-compat
 
-# 2. Install dependencies (recommended uv)
-uv sync
-# or use pip
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 
-# 3. Configure API key
 cp config/global_config.example.yaml config/global_config.yaml
-# Edit config/global_config.yaml and enter your API key (currently only supports deepseek)
-
-# 4.Configure hotkeys 
 cp config/hotkey_mapping.example.yaml config/hotkey_mapping.yaml
-
-# 5. Start the program
-uv run python main.py
 ```
 
-### 🔑 Get API Key
-
-#### Deepseek API
-1. Visit [Deepseek Platform](https://platform.deepseek.com/)
-2. Register an account and create an API key
-3. Configure in `config/global_config.yaml`:
+Edit `config/global_config.yaml` with your API settings. SiliconFlow example:
 
 ```yaml
 api:
   deepseek:
-    base_url: https://api.deepseek.com
-    key: 'sk-your-deepseek-api-key'
-    model: deepseek-chat
+    base_url: https://api.siliconflow.cn/v1
+    key: 'sk-your-siliconflow-api-key'
+    model: deepseek-ai/DeepSeek-V3.2
 ```
 
-### 🎯 5-Minute Experience
+Install and start the LaunchAgent:
 
-1. **Start Program**: `uv run python main.py`
-2. **Select Text**: Select a piece of text in any application
-3. **Trigger AI**: Press `Ctrl+Shift+1` (content organization) or `Ctrl+Shift+2` (translation)
-4. **View Results**: AI processing results will automatically insert at cursor position
-
-## 📁 Project Details
-
-### File Structure
-
-```
-prompt_go/
-├── main.py                      # Main program entry
-├── config/
-│   ├── global_config.yaml      # Global configuration (API keys, etc.)
-│   ├── hotkey_mapping.yaml     # Hotkey mapping
-│   └── *.example.yaml          # Configuration templates
-├── prompt/                     # Prompt template directory
-│   ├── tidy_content.md         # Content organization template
-│   └── translate.md            # Translation template
-├── modules/                   # Core functionality modules
-└── tests/                     # Test suite
+```bash
+scripts/prompt_goctl.sh install-agent
+scripts/prompt_goctl.sh start
+scripts/prompt_goctl.sh doctor
 ```
 
-### Basic Configuration
+## Use
 
-#### Global Configuration (`config/global_config.yaml`)
+1. Select text in any app.
+2. Press a configured hotkey, for example `ctrl+shift+1`.
+3. Prompt GO processes the selected text with the mapped template.
+4. The result is written back to the cursor location.
 
-```yaml
-api:
-  deepseek:
-    base_url: https://api.deepseek.com
-    key: 'sk-your-deepseek-api-key'
-    model: deepseek-chat
-    max_tokens: 2000
-    temperature: 0.7
+Common commands:
 
-logging:
-  level: INFO
-  file: prompt_manager.log
-  max_size: 10485760  # 10MB
-  backup_count: 5
-
-performance:
-  typing_speed: 0.005      # Typing speed (seconds/character)
-  hotkey_response_timeout: 0.5
-  template_cache_enabled: true
+```bash
+scripts/prompt_goctl.sh status
+scripts/prompt_goctl.sh start
+scripts/prompt_goctl.sh stop
+scripts/prompt_goctl.sh restart
+scripts/prompt_goctl.sh reload
+scripts/prompt_goctl.sh log
+scripts/prompt_goctl.sh doctor
 ```
 
-#### Hotkey Mapping (`config/hotkey_mapping.yaml`)
+## SwiftBar
 
-```yaml
-hotkeys:
-  ctrl+shift+1: tidy_content.md        # Content organization
-  ctrl+shift+2: translate.md           # Translation function
+Link the plugin into your SwiftBar plugin directory:
 
-settings:
-  enabled: true
-  response_delay: 100  # Response delay (milliseconds)
+```bash
+ln -sf ~/Developer/prompt_go/swiftbar/prompt-go.5s.sh ~/Documents/SwiftBar/prompt-go.5s.sh
 ```
 
-### Template Creation
+See [docs/swiftbar_cn.md](docs/swiftbar_cn.md) for the detailed menu-bar setup notes.
 
-Create `.md` files in the `prompt/` directory:
+## Permissions
 
-```markdown
-model: deepseek,deepseek-chat
-temperature: 0.3
-max_tokens: 2000
+Depending on how Prompt GO is started, macOS may require Accessibility/Input Monitoring permissions for SwiftBar, Terminal, or the resolved Python executable. Run:
 
----
-
-You are a professional translation assistant. Please translate the following text into English, maintaining the original tone and format:
-
-{{input}}
-
-Please provide accurate, natural translation, paying attention to contextual coherence.
+```bash
+scripts/prompt_goctl.sh doctor
 ```
 
-## 📄 License
+## Uninstall
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```bash
+cd ~/Developer/prompt_go
+scripts/prompt_goctl.sh stop
+scripts/prompt_goctl.sh uninstall-agent
+rm ~/Documents/SwiftBar/prompt-go.5s.sh
+```
 
-## 🙏 Acknowledgments
+Then remove the project directory if desired.
 
-Thanks to the following open source projects:
-- [pynput](https://github.com/moses-palmer/pynput) - Keyboard automation for text input
-- [pyperclip](https://github.com/asweigart/pyperclip) - Clipboard operations
-- [PyYAML](https://github.com/yaml/pyyaml) - YAML parsing
-- [pytest](https://github.com/pytest-dev/pytest) - Testing framework
-- [uv](https://github.com/astral-sh/uv) - Python package management
+## Development
 
----
+```bash
+source .venv/bin/activate
+python -m pytest tests/test_hotkey_listener.py tests/test_runtime_status.py tests/test_main.py -q -p no:cacheprovider
+bash -n scripts/prompt_goctl.sh swiftbar/prompt-go.5s.sh
+git diff --check
+```
 
-<div align="center">
+Development notes and version history are in [docs/DEVELOPMENT_LOG_CN.md](docs/DEVELOPMENT_LOG_CN.md) and [CHANGELOG.md](CHANGELOG.md).
 
-**⭐ If this project helps you, please give it a star!**
+## License
 
-**🐛 Found an issue?** [Submit Issue](https://github.com/astordu/prompt_go/issues) | **💡 Have suggestions?** [Start Discussion](https://github.com/astordu/prompt_go/discussions)
-
-Made with ❤️ for the AI community
-
-</div>
+MIT. See [LICENSE](LICENSE).

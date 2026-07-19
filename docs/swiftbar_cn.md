@@ -99,7 +99,7 @@ SwiftBar 菜单栏标题使用紧凑颜色状态灯，节省菜单栏空间：
 - 橙色：存在权限警告或 stale PID。
 - 红色：已停止或状态命令失败。
 
-下拉菜单会显示更详细的运行状态，包括当前后端、模型、API 配置状态和最近一次触发结果。这些信息来自本地运行状态文件：
+下拉菜单会显示更详细的运行状态，包括当前模型、API 配置状态和最近一次触发结果。这些信息来自本地运行状态文件：
 
 ```bash
 runtime/status.json
@@ -114,7 +114,7 @@ runtime/status.json
 - 系统设置 -> 隐私与安全性 -> 辅助功能
 - 系统设置 -> 隐私与安全性 -> 输入监控
 
-如果仍然从 Terminal 启动，则权限应授予 Terminal 或 iTerm2。
+如果仍然从 Terminal 启动，则权限应授予 Terminal 或 iTerm2。当前快捷键监听使用 macOS 原生热键 helper，不再通过 pynput 监听全局键盘事件。
 
 如果通过 LaunchAgent 启动，macOS 可能会要求给实际的 Python 可执行文件授权。可以通过 Doctor 查看路径：
 
