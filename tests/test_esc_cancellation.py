@@ -7,7 +7,7 @@ ESC键取消功能测试
 
 import time
 import threading
-from modules.streaming_cancellation import cancellation_manager, CancellationToken
+from modules.streaming_cancellation import cancellation_manager, CancellationAwareStreamProcessor, CancellationToken
 from modules.model_client import StreamChunk
 
 def test_cancellation_token():
@@ -65,6 +65,25 @@ def test_stream_cancellation():
     
     print(f"处理的内容: '{processed_content}'")
     print("✓ 流式取消测试完成")
+
+
+def test_empty_final_stream_is_error():
+    """测试只有结束块但没有内容时不能算成功"""
+    stream_id = "test_empty_stream"
+    token = cancellation_manager.create_cancellation_token(stream_id)
+    processor = CancellationAwareStreamProcessor(cancellation_manager)
+
+    result = processor.process_with_cancellation(
+        stream_id=stream_id,
+        chunks_iter=[StreamChunk(content="", chunk_id=0, is_final=True)],
+        chunk_handler=lambda content: None,
+        cancellation_token=token,
+    )
+
+    assert result["success"] is False
+    assert result["content"] == ""
+    assert result["total_chunks"] == 0
+    assert result["error"] == "AI流式响应为空"
 
 def test_esc_handler():
     """测试ESC键处理"""

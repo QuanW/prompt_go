@@ -854,6 +854,8 @@ class TextProcessor:
             'ai_response': None,
             'total_tokens': None,
             'response_time': None,
+            'output_chars': 0,
+            'total_chunks': 0,
             'error': None
         }
         
@@ -904,12 +906,17 @@ class TextProcessor:
             result['ai_response'] = ai_response['content']
             result['total_tokens'] = ai_response.get('total_tokens')
             result['response_time'] = time.time() - start_time
+            result['output_chars'] = len(ai_response.get('content') or '')
+            result['total_chunks'] = ai_response.get('total_chunks', 0)
             result['success'] = ai_response['success']
             
             if not ai_response['success']:
                 result['error'] = ai_response.get('error', 'AI响应失败')
             
-            logger.info(f"AI流式处理完成: {template_name}, 响应时间: {result['response_time']:.2f}s")
+            logger.info(
+                f"AI流式处理完成: {template_name}, 响应时间: {result['response_time']:.2f}s, "
+                f"输出字符: {result['output_chars']}, chunks: {result['total_chunks']}"
+            )
             
         except Exception as e:
             result['error'] = f"AI流式处理异常: {e}"
@@ -1079,11 +1086,19 @@ class TextProcessor:
         # 执行AI流式处理
         result = self.process_with_ai_streaming(template_name)
         
-        # 处理API不可用的情况
-        if not result['success'] and 'API' in str(result.get('error', '')):
-            error_message = "!!api不可用!!"
-            self._output_text_to_cursor(error_message)
-            result['output_text'] = error_message
+        # 处理API不可用或空响应的情况
+        if not result['success']:
+            error_text = str(result.get('error', ''))
+            if 'API' in error_text or '模型' in error_text:
+                error_message = "!!api不可用!!"
+            elif '响应为空' in error_text:
+                error_message = "!!api无返回内容!!"
+            else:
+                error_message = None
+
+            if error_message:
+                self._output_text_to_cursor(error_message)
+                result['output_text'] = error_message
         
         return result
     

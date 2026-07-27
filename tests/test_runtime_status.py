@@ -48,6 +48,8 @@ def test_runtime_status_trigger_result(tmp_path):
         "success": False,
         "error": "选中文本为空",
         "response_time": 0.1,
+        "output_chars": 0,
+        "total_chunks": 0,
     })
 
     data = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
@@ -55,3 +57,5 @@ def test_runtime_status_trigger_result(tmp_path):
     assert data["last_trigger"]["status"] == "error"
     assert data["last_trigger"]["error_type"] == "clipboard"
     assert data["last_error"]["type"] == "clipboard"
+    assert data["last_trigger"]["output_chars"] == 0
+    assert data["last_trigger"]["total_chunks"] == 0

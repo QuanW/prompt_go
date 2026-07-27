@@ -28,7 +28,7 @@ def classify_error(error: Optional[str]) -> Optional[str]:
     text = str(error).lower()
     if any(token in text for token in ["permission", "accessibility", "input monitoring", "辅助功能", "权限"]):
         return "permission"
-    if any(token in text for token in ["api", "模型", "model", "认证", "密钥", "超时", "timeout", "rate", "http", "连接失败"]):
+    if any(token in text for token in ["api", "模型", "model", "认证", "密钥", "超时", "timeout", "rate", "http", "连接失败", "响应为空", "流式响应"]):
         return "api"
     if any(token in text for token in ["模板", "template", "占位符"]):
         return "template"
@@ -124,6 +124,8 @@ class RuntimeStatus:
             "error": error,
             "response_time": result.get("response_time"),
             "model": model,
+            "output_chars": result.get("output_chars"),
+            "total_chunks": result.get("total_chunks"),
         }
         fields: Dict[str, Any] = {
             "state": "running",

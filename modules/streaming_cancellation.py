@@ -276,6 +276,11 @@ class CancellationAwareStreamProcessor:
                     logger.info(f"流 {stream_id} 已被用户取消")
                     result['cancelled'] = True
                     break
+
+                # 错误块优先处理，避免带 is_final 的错误被误判为成功。
+                if chunk.is_error:
+                    result['error'] = chunk.error_message or '未知错误'
+                    break
                 
                 # 处理数据块
                 if chunk.content:
@@ -291,14 +296,16 @@ class CancellationAwareStreamProcessor:
                 
                 # 检查是否完成
                 if chunk.is_final:
+                    result['success'] = bool(result['content'])
+                    break
+
+            if not result['cancelled'] and not result['error']:
+                if result['content']:
                     result['success'] = True
-                    break
-                    
-                # 检查错误
-                if chunk.is_error:
-                    result['error'] = chunk.error_message or '未知错误'
-                    break
-            
+                else:
+                    result['success'] = False
+                    result['error'] = 'AI流式响应为空'
+
             result['processing_time'] = time.time() - start_time
             
         except Exception as e:
