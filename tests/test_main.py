@@ -353,6 +353,27 @@ class TestPromptManager:
         assert prompt_manager.processed_requests == 0
         assert prompt_manager.error_count == 0
 
+    def test_hotkey_handler_ignores_overlapping_trigger(self, prompt_manager):
+        """测试已有请求处理时忽略重复快捷键触发"""
+        handler_holder = {}
+        listener = Mock()
+
+        def register(handler):
+            handler_holder['handler'] = handler
+
+        listener.register_all_hotkeys.side_effect = register
+        prompt_manager.hotkey_listener = listener
+        prompt_manager.text_processor = Mock()
+        prompt_manager._processing_lock.acquire()
+        try:
+            prompt_manager._setup_hotkey_callbacks()
+            handler_holder['handler']('demo.md')
+        finally:
+            prompt_manager._processing_lock.release()
+
+        prompt_manager.text_processor.process_template_with_ai_complete.assert_not_called()
+        assert prompt_manager.processed_requests == 0
+
 
 class TestUtilityFunctions:
     """工具函数测试"""

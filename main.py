@@ -21,6 +21,7 @@ import logging
 import time
 import asyncio
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -76,6 +77,7 @@ class PromptManager:
         self.start_time = None
         self.processed_requests = 0
         self.error_count = 0
+        self._processing_lock = threading.Lock()
         
         # 设置日志
         self._setup_logging_from_config()
@@ -369,6 +371,10 @@ class PromptManager:
         
         def hotkey_handler(template_name: str):
             """处理快捷键触发事件"""
+            if not self._processing_lock.acquire(blocking=False):
+                logger.warning(f"已有模板正在处理，忽略重复触发: {template_name}")
+                return
+
             try:
                 logger.info(f"处理模板: {template_name}")
                 self.processed_requests += 1
@@ -389,6 +395,8 @@ class PromptManager:
                 logger.error(error_message)
                 self.error_count += 1
                 self.runtime_status.set_error(error_message, classify_error(error_message))
+            finally:
+                self._processing_lock.release()
         
         # 设置回调函数
         if self.hotkey_listener:

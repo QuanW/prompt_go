@@ -1089,7 +1089,9 @@ class TextProcessor:
         # 处理API不可用或空响应的情况
         if not result['success']:
             error_text = str(result.get('error', ''))
-            if 'API' in error_text or '模型' in error_text:
+            if '频率超限' in error_text or 'rate' in error_text.lower():
+                error_message = "!!api请求频率超限，请稍后重试!!"
+            elif 'API' in error_text or '模型' in error_text:
                 error_message = "!!api不可用!!"
             elif '响应为空' in error_text:
                 error_message = "!!api无返回内容!!"

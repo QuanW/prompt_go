@@ -726,6 +726,23 @@ kimi:
             assert result['output_text'] == "!!api不可用!!"
             mock_output.assert_called_once_with("!!api不可用!!")
     
+    @patch.object(TextProcessor, 'process_with_ai_streaming')
+    @patch.object(TextProcessor, 'get_selected_text')
+    def test_process_template_with_ai_complete_rate_limit(self, mock_get_text, mock_ai_stream, text_processor):
+        """测试 API 频率超限时输出明确提示"""
+        mock_get_text.return_value = "test text"
+        mock_ai_stream.return_value = {
+            'success': False,
+            'error': '流式请求处理失败: API请求频率超限，请稍后重试'
+        }
+
+        with patch.object(text_processor, '_output_text_to_cursor') as mock_output:
+            result = text_processor.process_template_with_ai_complete("test_template.md")
+
+            assert result['success'] == False
+            assert result['output_text'] == "!!api请求频率超限，请稍后重试!!"
+            mock_output.assert_called_once_with("!!api请求频率超限，请稍后重试!!")
+
     def test_get_streaming_statistics(self, text_processor):
         """测试获取流式统计信息"""
         stats = text_processor.get_streaming_statistics()
