@@ -1,4 +1,3 @@
-model: deepseek,deepseek-chat
 temperature: 0.3
 max_tokens: 2000
 

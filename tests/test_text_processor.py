@@ -421,6 +421,45 @@ temperature: 0.5
         assert result['has_single_placeholder'] == True
         assert 'input' in result['placeholders']
         assert result['primary_placeholder'] == 'input'
+
+    def test_template_model_is_optional(self, text_processor, temp_template_dir):
+        """模板可以不指定模型，运行时使用全局默认模型。"""
+        template_path = Path(temp_template_dir) / "default_model_template.md"
+        template_path.write_text(
+            """temperature: 0.7
+max_tokens: 2000
+
+---
+
+请处理：{{input}}
+""",
+            encoding='utf-8'
+        )
+
+        template_content = text_processor.template_parser.parse_template("default_model_template.md")
+
+        assert template_content.get_model_name() is None
+        assert template_content.get_temperature() == 0.7
+
+    def test_template_allows_explicit_siliconflow_deepseek_model(self, text_processor, temp_template_dir):
+        """确需覆盖模型时，模板可以指定硅基流动 DeepSeek 具体模型。"""
+        template_path = Path(temp_template_dir) / "explicit_model_template.md"
+        template_path.write_text(
+            """model: deepseek,deepseek-ai/DeepSeek-R1
+temperature: 0.2
+max_tokens: 2000
+
+---
+
+请处理：{{input}}
+""",
+            encoding='utf-8'
+        )
+
+        template_content = text_processor.template_parser.parse_template("explicit_model_template.md")
+
+        assert template_content.get_model_name() == "deepseek,deepseek-ai/DeepSeek-R1"
+        assert template_content.get_specific_model_name() == "deepseek-ai/DeepSeek-R1"
     
     def test_validate_template_for_processing_no_placeholder(self, text_processor, invalid_template):
         """测试无占位符模板的验证"""
@@ -626,6 +665,33 @@ kimi:
                 text_processor._get_api_model_name("deepseek,deepseek-ai/DeepSeek-V3.1")
                 == "deepseek-ai/DeepSeek-V3.1"
             )
+
+    def test_get_effective_model_name_keeps_template_override(self, text_processor):
+        """模板指定模型时优先使用模板。"""
+        assert (
+            text_processor._get_effective_model_name("deepseek,deepseek-ai/DeepSeek-R1")
+            == "deepseek,deepseek-ai/DeepSeek-R1"
+        )
+
+    def test_get_effective_model_name_uses_global_default(self, text_processor):
+        """模板未指定模型时使用全局默认模型。"""
+        with patch.object(text_processor.config_manager, 'load_config'):
+            with patch.object(text_processor.config_manager, 'get') as mock_get:
+                mock_get.side_effect = lambda key, default=None: {
+                    'api': {
+                        'deepseek': {
+                            'key': 'test-key',
+                            'model': 'deepseek-ai/DeepSeek-V4-Flash',
+                        }
+                    },
+                    'api.provider': None,
+                    'api.deepseek.model': 'deepseek-ai/DeepSeek-V4-Flash',
+                }.get(key, default)
+
+                assert (
+                    text_processor._get_effective_model_name(None)
+                    == "deepseek,deepseek-ai/DeepSeek-V4-Flash"
+                )
     
     @patch.object(TextProcessor, '_get_api_key_for_model')
     def test_get_model_client_success(self, mock_get_api_key, text_processor):

@@ -47,11 +47,15 @@ Edit `config/global_config.yaml` with your API settings. SiliconFlow example:
 
 ```yaml
 api:
+  provider: deepseek
   deepseek:
     base_url: https://api.siliconflow.cn/v1
     key: 'sk-your-siliconflow-api-key'
-    model: deepseek-ai/DeepSeek-V3.2
+    model: deepseek-ai/DeepSeek-V4-Flash
 ```
+
+Templates use this global model by default. Add `model: provider,specific-model`
+to a template only when that task really needs a different model.
 
 Install and start the LaunchAgent:
 

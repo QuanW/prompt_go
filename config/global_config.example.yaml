@@ -2,6 +2,7 @@
 # 复制此文件为 global_config.yaml 并填入真实的API密钥
 
 api:
+  provider: deepseek
   deepseek:
     base_url: https://api.deepseek.com
     # 示例密钥格式（请替换为您的真实密钥）
@@ -56,4 +57,4 @@ performance:
 # 1. 复制此文件为 global_config.yaml
 # 2. 在 https://platform.deepseek.com/ 获取 Deepseek API Key
 # 3. 将真实的API密钥填入对应的 'key' 字段
-# 4. 根据需要调整其他配置参数 
+# 4. 根据需要调整其他配置参数

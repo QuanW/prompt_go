@@ -6,11 +6,19 @@
 
 每个模板文件包含两部分，用 `---` 分隔：
 
-### 第一部分：模型配置
+### 第一部分：模板配置
 ```yaml
-model: deepseek          # 使用的模型 (deepseek)
 temperature: 0.3         # 温度参数 (0.0-1.0)
-max_tokens: 2000        # 最大令牌数
+max_tokens: 2000         # 最大令牌数
+```
+
+默认情况下，模板使用 `config/global_config.yaml` 中配置的全局模型。
+只有当某个模板确实需要特殊模型时，才添加 `model` 覆盖项：
+
+```yaml
+model: deepseek,deepseek-ai/DeepSeek-R1
+temperature: 0.2
+max_tokens: 3000
 ```
 
 ### 第二部分：提示词内容
@@ -43,6 +51,7 @@ max_tokens: 2000        # 最大令牌数
 ## 注意事项
 
 - 文件名使用英文和下划线
-- 确保模型名称正确 (deepseek)
+- 普通模板不要写死模型，优先使用全局默认模型
+- 只有特殊任务才在模板中指定具体模型
 - 模板内容要清晰具体
 - 定期备份重要的模板文件

@@ -853,6 +853,39 @@ class TextProcessor:
                 return configured_model
 
         return requested_model
+
+    def _get_effective_model_name(self, template_model_name: Optional[str]) -> Optional[str]:
+        """解析模板最终使用的模型；模板缺省时回退到全局默认模型。"""
+        if template_model_name:
+            return template_model_name
+
+        try:
+            self.config_manager.load_config()
+        except Exception as e:
+            logger.error(f"加载全局模型配置失败: {e}")
+            return None
+
+        api_config = self.config_manager.get('api', {})
+        if not isinstance(api_config, dict):
+            return None
+
+        provider = self.config_manager.get('api.provider')
+        if not provider:
+            for candidate, provider_config in api_config.items():
+                if candidate == 'provider' or not isinstance(provider_config, dict):
+                    continue
+                if str(provider_config.get('key') or '').strip():
+                    provider = candidate
+                    break
+
+        if not provider:
+            provider = 'deepseek'
+
+        model = self.config_manager.get(f'api.{provider}.model')
+        if model:
+            return f"{provider},{model}"
+
+        return provider
     
     def process_with_ai_streaming(self, template_name: str, 
                                  output_callback: Optional[Callable[[str], None]] = None) -> Dict[str, Any]:
@@ -893,12 +926,14 @@ class TextProcessor:
             
             # 2. 获取模板配置
             template_content = template_result.get('template_content', {})
-            model_name = template_content.get('model_name')
+            template_model_name = template_content.get('model_name')
+            model_name = self._get_effective_model_name(template_model_name)
             model_config = template_content.get('model_config', {})
+            result['template_model_name'] = template_model_name
             result['model_name'] = model_name
             
             if not model_name:
-                result['error'] = "模板中未配置模型名称"
+                result['error'] = "未配置可用的全局默认模型"
                 return result
             
             # 3. 获取模型客户端

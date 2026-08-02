@@ -531,26 +531,20 @@ class TemplateParser(BasicTemplateParser):
         Raises:
             TemplateParsingError: 配置无效时抛出异常
         """
-        # 检查必需的配置项
-        required_fields = ['model']
-        for field in required_fields:
-            if field not in config:
-                raise TemplateParsingError(f"缺少必需的配置项: {field}")
-                
-        # 验证模型名称
+        # 验证可选模型名称；未配置时由全局配置提供默认模型。
         model = config.get('model')
-        if not isinstance(model, str) or not model.strip():
+        if model is not None and (not isinstance(model, str) or not model.strip()):
             raise TemplateParsingError("model 配置项必须是非空字符串")
             
         # 验证支持的模型（支持厂商,模型格式和简化格式）
-        if self._is_provider_model_format(model):
+        if model is not None and self._is_provider_model_format(model):
             # 厂商,模型格式：如 "deepseek,deepseek-chat"
             provider, specific_model = self._parse_provider_model(model)
             if not self._validate_provider_model_combination(provider, specific_model):
                 raise TemplateParsingError(
                     f"不支持的厂商和模型组合: {model}，请检查厂商和模型名称是否匹配"
                 )
-        else:
+        elif model is not None:
             # 简化格式：如 "deepseek" 或 "deepseek-chat"
             supported_models = [
                 'deepseek', 'deepseek-chat', 'deepseek-reasoner',  # DeepSeek系列
@@ -635,6 +629,15 @@ class TemplateParser(BasicTemplateParser):
             'kimi': ['kimi-k2-0711-preview']
         }
         
+        provider = provider.lower().strip()
+        specific_model = specific_model.strip()
+
+        if provider == 'deepseek' and (
+            specific_model.startswith('deepseek-ai/')
+            or specific_model.startswith('Pro/deepseek-ai/')
+        ):
+            return True
+
         # 检查厂商是否支持
         if provider not in provider_models:
             return False
@@ -1902,4 +1905,4 @@ class TemplateWatcher:
             'callback_count': len(self.change_callbacks),
             'debounce_delay': self.debounce_delay,
             'event_stats': self.event_stats.copy()
-        } 
+        }

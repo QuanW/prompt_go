@@ -1,4 +1,3 @@
-model: kimi
 temperature: 0.2
 max_tokens: 1500
 
