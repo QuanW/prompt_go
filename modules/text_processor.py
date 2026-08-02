@@ -826,13 +826,33 @@ class TextProcessor:
         Returns:
             str: API请求中应使用的模型名称
         """
+        provider = None
+        requested_model = model_name
+
         # 检查是否是厂商,模型格式
         if ',' in model_name and len(model_name.split(',')) == 2:
-            # 返回具体的模型名称
-            return model_name.split(',', 1)[1].strip()
-        else:
-            # 返回原模型名称
-            return model_name
+            provider, requested_model = [part.strip() for part in model_name.split(',', 1)]
+
+        if provider and provider.lower() == 'deepseek':
+            configured_model = self.config_manager.get('api.deepseek.model')
+            alias_models = {'deepseek', 'deepseek-chat', 'deepseek-reasoner'}
+            is_siliconflow_model = (
+                isinstance(configured_model, str)
+                and (
+                    configured_model.startswith('deepseek-ai/')
+                    or configured_model.startswith('Pro/deepseek-ai/')
+                )
+            )
+
+            if requested_model in alias_models and is_siliconflow_model:
+                logger.info(
+                    "使用全局配置的硅基流动模型: template=%s, api_model=%s",
+                    model_name,
+                    configured_model,
+                )
+                return configured_model
+
+        return requested_model
     
     def process_with_ai_streaming(self, template_name: str, 
                                  output_callback: Optional[Callable[[str], None]] = None) -> Dict[str, Any]:
@@ -1539,4 +1559,4 @@ class TextProcessor:
             
         except Exception as e:
             logger.error(f"编码统计分析失败: {e}")
-            return {'error': str(e)} 
+            return {'error': str(e)}

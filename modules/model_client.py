@@ -549,9 +549,11 @@ class ModelClient(ABC):
             if response.status_code == 401:
                 raise APIAuthenticationError("API认证失败，请检查API密钥")
             elif response.status_code == 429:
-                raise APIRateLimitError("API请求频率超限，请稍后重试")
+                raise APIRateLimitError(self._build_rate_limit_message(response))
             elif response.status_code >= 400:
-                raise APIConnectionError(f"API请求失败，状态码: {response.status_code}")
+                raise APIConnectionError(
+                    f"API请求失败，状态码: {response.status_code}{self._get_error_detail(response)}"
+                )
             
             return response.json()
             
@@ -579,9 +581,11 @@ class ModelClient(ABC):
                 if response.status_code == 401:
                     raise APIAuthenticationError("API认证失败，请检查API密钥")
                 elif response.status_code == 429:
-                    raise APIRateLimitError("API请求频率超限，请稍后重试")
+                    raise APIRateLimitError(self._build_rate_limit_message(response))
                 elif response.status_code >= 400:
-                    raise APIConnectionError(f"API请求失败，状态码: {response.status_code}")
+                    raise APIConnectionError(
+                        f"API请求失败，状态码: {response.status_code}{self._get_error_detail(response)}"
+                    )
                 
                 event_lines = []
                 for raw_line in response.iter_lines(decode_unicode=False):
@@ -608,6 +612,26 @@ class ModelClient(ABC):
             raise APIConnectionError(f"API连接失败: {e}")
         except requests.exceptions.RequestException as e:
             raise ModelClientError(f"流式HTTP请求失败: {e}", original_error=e)
+
+    def _build_rate_limit_message(self, response: requests.Response) -> str:
+        """构建不含敏感信息的限流错误消息。"""
+        return f"API请求频率超限，请稍后重试{self._get_error_detail(response)}"
+
+    def _get_error_detail(self, response: requests.Response) -> str:
+        """提取供应商错误正文，避免记录 headers 或认证信息。"""
+        try:
+            detail = response.text.strip()
+        except Exception:
+            return ""
+
+        if not detail:
+            return ""
+
+        detail = detail.replace('\n', ' ').replace('\r', ' ')
+        if len(detail) > 500:
+            detail = detail[:500] + "..."
+
+        return f"；供应商返回: {detail}"
     
     async def _send_http_request_async(self, data: Dict[str, Any], timeout: int) -> Dict[str, Any]:
         """发送HTTP请求（异步）"""
@@ -874,7 +898,13 @@ class DeepseekClient(ModelClient):
     def validate_model(self, model: str) -> bool:
         """验证模型名称是否支持（支持模型映射）"""
         mapped_model = self._map_deepseek_model(model)
-        return mapped_model in self.supported_models
+        if mapped_model in self.supported_models:
+            return True
+
+        return (
+            mapped_model.startswith('deepseek-ai/')
+            or mapped_model.startswith('Pro/deepseek-ai/')
+        )
     
     def prepare_request(self, request: ModelRequest) -> Dict[str, Any]:
         """准备Deepseek API请求数据"""

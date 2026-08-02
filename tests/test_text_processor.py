@@ -599,6 +599,33 @@ kimi:
         assert text_processor._determine_model_type("kimi-chat") == ModelType.KIMI
         assert text_processor._determine_model_type("moonshot-v1") == ModelType.KIMI
         assert text_processor._determine_model_type("unknown-model") == ModelType.DEEPSEEK  # 默认
+
+    def test_get_api_model_name_uses_configured_siliconflow_model_for_deepseek_alias(self, text_processor):
+        """DeepSeek别名在硅基流动配置下应使用全局具体模型。"""
+        with patch.object(text_processor.config_manager, 'get') as mock_get:
+            mock_get.return_value = "deepseek-ai/DeepSeek-V3.2"
+
+            assert (
+                text_processor._get_api_model_name("deepseek,deepseek-chat")
+                == "deepseek-ai/DeepSeek-V3.2"
+            )
+
+    def test_get_api_model_name_keeps_official_deepseek_alias(self, text_processor):
+        """官方DeepSeek配置下应保留官方模型别名。"""
+        with patch.object(text_processor.config_manager, 'get') as mock_get:
+            mock_get.return_value = "deepseek-chat"
+
+            assert text_processor._get_api_model_name("deepseek,deepseek-chat") == "deepseek-chat"
+
+    def test_get_api_model_name_keeps_explicit_siliconflow_model(self, text_processor):
+        """模板已指定具体硅基流动模型时应保持模板优先。"""
+        with patch.object(text_processor.config_manager, 'get') as mock_get:
+            mock_get.return_value = "deepseek-ai/DeepSeek-V3.2"
+
+            assert (
+                text_processor._get_api_model_name("deepseek,deepseek-ai/DeepSeek-V3.1")
+                == "deepseek-ai/DeepSeek-V3.1"
+            )
     
     @patch.object(TextProcessor, '_get_api_key_for_model')
     def test_get_model_client_success(self, mock_get_api_key, text_processor):
@@ -976,4 +1003,4 @@ kimi:
         
         # 验证过滤后的文本被输出
         expected_calls = len("HelloWorld!")  # 过滤掉\x00和\u200B
-        assert mock_controller.type.call_count == expected_calls 
+        assert mock_controller.type.call_count == expected_calls

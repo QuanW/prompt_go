@@ -359,6 +359,9 @@ class TestDeepseekClient:
         supported_models = deepseek_client.get_supported_models()
         if supported_models:
             assert deepseek_client.validate_model(supported_models[0]) == True
+
+        assert deepseek_client.validate_model("deepseek-ai/DeepSeek-V4-Flash") == True
+        assert deepseek_client.validate_model("Pro/deepseek-ai/DeepSeek-V4-Flash") == True
         
         assert deepseek_client.validate_model("invalid-model") == False
 
@@ -434,4 +437,4 @@ class TestIntegration:
         
         assert buffer.get_content() == "Hello World"
         assert buffer.is_complete == True
-        assert len(buffer.chunks) == 3 
+        assert len(buffer.chunks) == 3
